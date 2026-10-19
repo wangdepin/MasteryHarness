@@ -73,6 +73,14 @@ const nextConfig: NextConfig = {
 			// imports it, so without this include the packaged server dies on
 			// ERR_MODULE_NOT_FOUND when loading puppeteer-core.
 			"node_modules/@puppeteer/browsers/lib/browser-data/**/*",
+			// Same strip, same fix: gcp-metadata ("...data/" substring) is
+			// required by google-auth-library, which pi-ai's Gemini client
+			// loads — without it "Cannot find module 'gcp-metadata'".
+			"node_modules/gcp-metadata/**/*",
+			// An include adds only the files it matches — it does not follow
+			// their requires — so gcp-metadata's own missing deps ride along.
+			"node_modules/json-bigint/**/*",
+			"node_modules/bignumber.js/**/*",
 			"node_modules/@earendil-works/pi-agent-core/dist/**/*.json",
 		],
 	},
