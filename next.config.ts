@@ -37,11 +37,7 @@ const nextConfig: NextConfig = {
 	// stay intact, and the script guards against leaked data/keys.
 	outputFileTracingExcludes: {
 		"*": [
-			// `contains: true` matching made plain "data/**/*" also hit
-			// @puppeteer/browsers/lib/browser-data/ (2026-10-19) — the
-			// packaged server died on ERR_MODULE_NOT_FOUND. `!(*-)data`
-			// skips dirs whose name merely ends in "-data".
-			"**/!(*-)data/**/*",
+			"data/**/*",
 			"auth.json",
 			".env*",
 		],
@@ -71,6 +67,12 @@ const nextConfig: NextConfig = {
 			// per-platform-binary story as the canvas above (one per build).
 			"node_modules/@resvg/resvg-js-*/**/*",
 			"node_modules/@earendil-works/pi-ai/dist/providers/data/**/*",
+			// The "data/**/*" exclude above also strips this dir (its name ends
+			// in "-data"; verified 2026-10-19 — "**/data/**/*" does too, and
+			// "**/!(*-)data/**/*" keeps it but leaks the repo's data/). launch.js
+			// imports it, so without this include the packaged server dies on
+			// ERR_MODULE_NOT_FOUND when loading puppeteer-core.
+			"node_modules/@puppeteer/browsers/lib/browser-data/**/*",
 			"node_modules/@earendil-works/pi-agent-core/dist/**/*.json",
 		],
 	},
