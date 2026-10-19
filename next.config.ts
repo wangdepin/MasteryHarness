@@ -37,7 +37,11 @@ const nextConfig: NextConfig = {
 	// stay intact, and the script guards against leaked data/keys.
 	outputFileTracingExcludes: {
 		"*": [
-			"data/**/*",
+			// `contains: true` matching made plain "data/**/*" also hit
+			// @puppeteer/browsers/lib/browser-data/ (2026-10-19) — the
+			// packaged server died on ERR_MODULE_NOT_FOUND. `!(*-)data`
+			// skips dirs whose name merely ends in "-data".
+			"**/!(*-)data/**/*",
 			"auth.json",
 			".env*",
 		],
