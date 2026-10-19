@@ -164,12 +164,18 @@ export function QuestionDock({
 	);
 }
 
+/** Font/text-style commands that only restyle their braced argument — the
+ *  teaser keeps the argument and drops the command. */
+const TEXT_STYLE_COMMAND =
+	/\\(?:mathrm|mathbf|mathit|mathsf|mathtt|mathcal|mathbb|mathfrak|boldsymbol|bm|text|textrm|textbf|textit|operatorname|mbox)\s*\{([^{}]*)\}/g;
+
 /** A plain-text teaser of a question for the collapsed bar: unwrap math, flatten common LaTeX. */
-function teaserText(q: string): string {
+export function teaserText(q: string): string {
 	return q
 		.replace(/\\\(([\s\S]*?)\\\)/g, "$1") // \(...\) inline math
 		.replace(/\\\[([\s\S]*?)\\\]/g, "$1") // \[...\] display math
 		.replace(/\$\$?([^$]*)\$\$?/g, "$1") // standard $...$/$$...$$ math
+		.replace(TEXT_STYLE_COMMAND, "$1") // \mathrm{Var} → Var (before the bare-command strip)
 		.replace(/\\frac\{([^{}]*)\}\{([^{}]*)\}/g, "$1/$2")
 		.replace(/\\([a-zA-Z]+)/g, "$1")
 		.replace(/[{}]/g, "")
