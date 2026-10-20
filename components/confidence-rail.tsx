@@ -15,7 +15,7 @@ import { CONFIDENCE_STOPS } from "@/src/core";
  * disc per side) so the dock's 0/100 stops sit flush at the very ends.
  * The static card has no thumb, but keeps the identical shape.
  *
- * Stack law: #141414 base (the darker main background), SOLID stop ticks
+ * Stack law: the main background as base (--background), SOLID stop ticks
  * as background layers UNDER the fill, and the fill itself TRANSPARENT
  * past the value — so ticks show only on the empty side, never over the
  * color. Ticks skip 0 and 100 (the rail's ends already say those).
@@ -35,11 +35,11 @@ export const CONFIDENCE_COLORS: readonly string[] = [
 export function confidenceRailStyle(value: number): CSSProperties {
 	const color = CONFIDENCE_COLORS[CONFIDENCE_STOPS.indexOf(value)] ?? CONFIDENCE_COLORS[2]!;
 	return {
-		backgroundColor: "#141414",
+		backgroundColor: "var(--background)",
 		backgroundImage: [
 			`linear-gradient(90deg, ${color} 0%, ${color} ${value}%, transparent ${value}%, transparent 100%)`,
 			...[30, 50, 70, 90].map(
-				() => "linear-gradient(90deg, rgba(230,230,230,0.35), rgba(230,230,230,0.35))",
+				() => "linear-gradient(90deg, color-mix(in srgb, var(--foreground) 35%, transparent), color-mix(in srgb, var(--foreground) 35%, transparent))",
 			),
 		].join(", "),
 		backgroundSize: ["100% 100%", "1px 100%", "1px 100%", "1px 100%", "1px 100%"].join(", "),

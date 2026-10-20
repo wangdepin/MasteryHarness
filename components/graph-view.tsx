@@ -70,6 +70,7 @@ import { incrementalLayout, propositionSessionHref, type GraphCostSummary, type 
 import { GraphCanvasRenderer, type GraphRenderSettings } from "./graph-canvas.ts";
 import { usePopoverDismiss } from "@/components/popover-dismiss";
 import { useActivity } from "@/components/activity-dock";
+import { useAppearance } from "@/components/settings/appearance";
 import { useServerEvent, useServerResync } from "@/components/server-events";
 import { MenuShell } from "@/components/menu-shell.tsx";
 import { DeleteNodeDialog } from "@/components/delete-node-dialog.tsx";
@@ -962,6 +963,8 @@ export function GraphView({
 	onPracticeSelectionChange?: (nodes: { id: string; name: string; statement: string }[]) => void;
 	onChainSelectClose?: () => void;
 }) {
+	// The canvas wants resolved hex, so a mode flip re-feeds the colors.
+	const { effectiveMode } = useAppearance();
 	const containerRef = useRef<HTMLDivElement | null>(null);
 	const canvasRef = useRef<HTMLCanvasElement | null>(null);
 	const cardRef = useRef<HTMLDivElement | null>(null);
@@ -1433,7 +1436,7 @@ export function GraphView({
 			// Match the app typography (Geist via the body's stack).
 			fontFamily: getComputedStyle(document.body).fontFamily,
 		});
-	}, [snapshot, isEmpty]);
+	}, [snapshot, isEmpty, effectiveMode]);
 
 	// Feed #2 — settings: just marks the frame dirty. No rebuild, no
 	// re-layout, no camera touch (the whole point of the new renderer).

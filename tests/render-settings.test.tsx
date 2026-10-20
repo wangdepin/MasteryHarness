@@ -225,12 +225,14 @@ describe("KeysSection (thin SSR)", () => {
 });
 
 describe("AppearanceSection (thin SSR)", () => {
-	it("mode is rendered DISABLED — dark-only this wave, no lying control", () => {
+	it("mode offers Dark / Light / System and is live (factory: dark)", () => {
 		const html = renderToStaticMarkup(<AppearanceSection appearance={undefined} onSectionChange={() => {}} />);
-		assert.ok(tagOf(html, "select-mode").includes("disabled"), "mode select disabled");
-		assert.ok(html.includes("Coming soon"));
-		// The whole row dims, graph-view style (the control never adds its own).
-		assert.ok(tagOf(html, "row-mode").includes("opacity-40"), "mode row dims whole");
+		const select = tagOf(html, "select-mode");
+		assert.ok(!select.includes("disabled"), "mode select enabled");
+		assert.ok(!html.includes("Coming soon"));
+		assert.ok(!tagOf(html, "row-mode").includes("opacity-40"), "row not dimmed");
+		for (const value of ["dark", "light", "system"]) assert.ok(html.includes(`<option value="${value}"`), value);
+		assert.ok(html.includes(`<option value="dark" selected`), "factory mode dark is selected");
 	});
 
 	it("hex inputs carry the factory placeholders; prose size resolves against the factory", () => {

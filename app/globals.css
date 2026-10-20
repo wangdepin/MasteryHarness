@@ -102,6 +102,33 @@
 	--lh-heading-weight: 900;
 }
 
+/* The light palette — the dark one mirrored: #FAFAFA base, surfaces step
+   DOWN (card -8, accent -22, border -47 per channel — the same curve
+   derivedPalette uses for a custom background), text #1a1a1a. Toggled by
+   the appearance provider (<html class="light">), pre-set by the boot
+   script in app/layout.tsx. */
+html.light {
+	color-scheme: light;
+	--background: #fafafa;
+	--foreground: #1a1a1a;
+	--card: #f2f2f2;
+	--card-foreground: #1a1a1a;
+	--popover: #f2f2f2;
+	--popover-foreground: #1a1a1a;
+	--primary: #1a1a1a;
+	--primary-foreground: #fafafa;
+	--secondary: #f2f2f2;
+	--secondary-foreground: #1a1a1a;
+	--muted: #f2f2f2;
+	--muted-foreground: #6b6b6b;
+	--accent: #e4e4e4;
+	--accent-foreground: #1a1a1a;
+	--destructive: oklch(0.577 0.245 27.325);
+	--border: #cbcbcb;
+	--input: #cbcbcb;
+	--ring: #8d8d8d;
+}
+
 /* CMU Serif bold (titles) — bundled local file, no CDN dependency. */
 @font-face {
 	font-family: "lh-cmu";

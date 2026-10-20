@@ -98,6 +98,14 @@ describe("parseAgentSettingsBody", () => {
 });
 
 describe("parseAppearanceSettingsBody", () => {
+	it("accepts every mode including system", () => {
+		for (const mode of ["dark", "light", "system"] as const) {
+			const r = parseAppearanceSettingsBody({ mode });
+			assert.ok(r.ok);
+			assert.equal(r.settings.mode, mode);
+		}
+	});
+
 	it("parses every field; hex-or-null colors; clamps happen at sanitize, rejects here", () => {
 		const r = parseAppearanceSettingsBody({
 			mode: "light",

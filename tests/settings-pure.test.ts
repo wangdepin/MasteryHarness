@@ -8,6 +8,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { appearanceVars, derivedPalette, resolveAppearance, staleVarNames } from "../components/settings/appearance.tsx";
+import { effectiveMode } from "../components/settings/mode.ts";
 import {
 	PROMPT_IN_USE_HINT,
 	composePromptSwitch,
@@ -70,7 +71,49 @@ describe("derivedPalette — the dark curve keeps today's relationships", () => 
 	});
 });
 
+describe("derivedPalette — the light curve mirrors the dark one downward", () => {
+	it("steps down by the same offsets (card -8, accent -22, edges -47)", () => {
+		assert.deepEqual(derivedPalette("#fafafa", "light"), {
+			"--background": "#fafafa",
+			"--card": "#f2f2f2",
+			"--popover": "#f2f2f2",
+			"--secondary": "#f2f2f2",
+			"--muted": "#f2f2f2",
+			"--accent": "#e4e4e4",
+			"--border": "#cbcbcb",
+			"--input": "#cbcbcb",
+			"--primary-foreground": "#fafafa",
+		});
+	});
+
+	it("clamps at 0 instead of wrapping", () => {
+		assert.equal(derivedPalette("#101010", "light")["--border"], "#000000");
+	});
+
+	it("dark stays the default mode", () => {
+		assert.deepEqual(derivedPalette("#141414"), derivedPalette("#141414", "dark"));
+	});
+});
+
+describe("effectiveMode — system resolves against the OS, explicit modes ignore it", () => {
+	it("explicit modes win over the OS", () => {
+		assert.equal(effectiveMode("dark", false), "dark");
+		assert.equal(effectiveMode("light", true), "light");
+	});
+
+	it("system follows the OS preference", () => {
+		assert.equal(effectiveMode("system", true), "dark");
+		assert.equal(effectiveMode("system", false), "light");
+	});
+});
+
 describe("appearanceVars — the mapping the provider applies", () => {
+	it("a custom background derives on the active mode's curve", () => {
+		const a = resolveAppearance({ background: "#ffffff" });
+		assert.equal(appearanceVars(a, "light")["--card"], "#f7f7f7");
+		assert.equal(appearanceVars(a, "dark")["--card"], "#ffffff", "dark raises (clamped)");
+	});
+
 	it("factory appearance: only the always-applied tokens move", () => {
 		const vars = appearanceVars(resolveAppearance(undefined));
 		assert.equal(vars["--lh-prose-size"], "16px");
