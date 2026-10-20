@@ -77,6 +77,8 @@ import {
 	questionNeedsReveal,
 } from "@/src/core";
 import { ReadingThinkingField } from "@/components/reading-thinking";
+import { QuoteSelection } from "@/components/quote-selection";
+import { appendQuote } from "@/components/quote-selection-dom";
 import { currentUserThinkingOpen, setAllUserThinkingOpen } from "@/components/thinking-block";
 import { slotsConfigured, type ModelsSettings } from "@/src/core";
 import { useSettingsSaved } from "@/components/settings-signal";
@@ -2267,6 +2269,19 @@ function DockOverlay({
 					    teach-phase check waits — the same cue that collapses it. It
 					    claims dictated speech until the learner reveals the check
 					    (the dock reclaims then). Rides the check answer on submit. */}
+					{pending && requiresReveal && (
+						<QuoteSelection
+							onQuote={(text) => {
+								onReadingThinking(appendQuote(readingThinking, text));
+								// Land the caret after the quote once the field has re-rendered.
+								requestAnimationFrame(() => {
+									const field = document.querySelector<HTMLTextAreaElement>('[data-testid="reading-thinking-field"] textarea');
+									field?.focus();
+									field?.setSelectionRange(field.value.length, field.value.length);
+								});
+							}}
+						/>
+					)}
 					{pending && requiresReveal && (
 						<ReadingThinkingField
 							value={readingThinking}
