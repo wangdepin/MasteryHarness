@@ -7,7 +7,7 @@ import { ThinkingBlock } from "@/components/thinking-block";
 import { cn } from "@/lib/utils";
 import { MessageResponse } from "@/components/ai-elements/message";
 import type { QuestionAnswerData } from "@/src/core";
-import { parseAskInput, parseQuizInput } from "@/src/core";
+import { parseAskInput, parseQuizInput, restoreLiteralNewlines } from "@/src/core";
 
 /**
  * Static rendering of an answered question (tool part in `output-available`).
@@ -86,7 +86,7 @@ export function AnsweredCard({ answer, input }: { answer: QuestionAnswerData; in
 					))}
 			</div>
 			<div className="mb-3 font-medium">
-				<MessageResponse>{answer.questionText}</MessageResponse>
+				<MessageResponse>{restoreLiteralNewlines(answer.questionText)}</MessageResponse>
 			</div>
 			{parsedDetails && (
 				// The details line, same paint as the pending dock (owner,
@@ -131,13 +131,13 @@ export function AnsweredCard({ answer, input }: { answer: QuestionAnswerData; in
 									</span>
 								)}
 								<span className={cn(!sel && "text-muted-foreground")}>
-									<MessageResponse>{opt.label}</MessageResponse>
+									<MessageResponse>{restoreLiteralNewlines(opt.label)}</MessageResponse>
 									{descByIndex.get(opt.index) && (
 										// Ask-option subtext (owner, 2026-10-12): same markdown path
 										// as the pending dock — LaTeX included. Quiz options carry
 										// none (owner ruling 2026-09-26); the map stays empty for them.
 										<MessageResponse className="lh-prose block text-xs text-muted-foreground">
-											{descByIndex.get(opt.index)}
+											{restoreLiteralNewlines(descByIndex.get(opt.index) ?? "")}
 										</MessageResponse>
 									)}
 								</span>
@@ -213,7 +213,7 @@ export function AnsweredCard({ answer, input }: { answer: QuestionAnswerData; in
 							<span className="font-medium text-muted-foreground">Why: </span>
 							{/* The markdown wrapper must go truly inline — a block <p> after the
 							   "Why:" label created the oversized leading gap (owner's fix list). */}
-							<MessageResponse className="inline [&_p]:inline [&_p]:m-0">{answer.explanation}</MessageResponse>
+							<MessageResponse className="inline [&_p]:inline [&_p]:m-0">{restoreLiteralNewlines(answer.explanation)}</MessageResponse>
 						</div>
 					)}
 				</div>

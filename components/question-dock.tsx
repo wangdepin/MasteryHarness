@@ -33,6 +33,7 @@ import {
 	type QuizToolInput,
 	type SelectMode,
 	type Phase3,
+	restoreLiteralNewlines,
 } from "@/src/core";
 import { CONFIDENCE_COLORS, confidenceRailStyle } from "@/components/confidence-rail";
 
@@ -566,11 +567,11 @@ function QuestionDockForm({
 					{qd.mode === "multi-select" && " · select all that apply"}
 				</div>
 				<div className="mb-3 font-medium">
-					<MessageResponse>{qd.question}</MessageResponse>
+					<MessageResponse>{restoreLiteralNewlines(qd.question)}</MessageResponse>
 				</div>
 				{qd.context && (
 					<div className="mb-3 text-sm text-muted-foreground">
-						<MessageResponse>{qd.context}</MessageResponse>
+						<MessageResponse>{restoreLiteralNewlines(qd.context)}</MessageResponse>
 					</div>
 				)}
 
@@ -606,7 +607,7 @@ function QuestionDockForm({
 										)}
 									</span>
 									<span>
-										<MessageResponse>{opt.label}</MessageResponse>
+										<MessageResponse>{restoreLiteralNewlines(opt.label)}</MessageResponse>
 										{kind !== "quiz" && opt.description && (
 											// Option subtext renders in Source Sans 3 (owner's mockup);
 											// the "I don't know" copy stays JetBrains Mono. QUIZ options render
@@ -616,7 +617,7 @@ function QuestionDockForm({
 											// label (owner, 2026-10-12): descriptions are full markdown —
 											// LaTeX included — not plain text.
 											<MessageResponse className="lh-prose block text-xs text-muted-foreground">
-												{opt.description}
+												{restoreLiteralNewlines(opt.description)}
 											</MessageResponse>
 										)}
 									</span>
