@@ -65,6 +65,8 @@
 	--lh-prose-leading: 1.5;
 	/* Markdown heading weight (appearance settings; 900 = the Black cut). */
 	--lh-heading-weight: 900;
+	/* The plan map's ink: pure white outlines/arrows/text on dark. */
+	--lh-plan-ink: #ffffff;
 }
 
 /* The app is always dark (<html class="dark">); mirror the same values so
@@ -127,6 +129,7 @@ html.light {
 	--border: #cbcbcb;
 	--input: #cbcbcb;
 	--ring: #8d8d8d;
+	--lh-plan-ink: #1a1a1a;
 }
 
 /* CMU Serif bold (titles) — bundled local file, no CDN dependency. */
@@ -139,6 +142,7 @@ html.light {
 }
 
 @theme inline {
+	--color-plan-ink: var(--lh-plan-ink);
 	/* Fonts: chrome = JetBrains Mono, prose = Source Sans 3, titles = CMU
 	   Serif bold. The JetBrains/SourceSans variables attach in app/layout.tsx.
 	   (owner, typography round) The Tailwind defaults are ALIASED to the app

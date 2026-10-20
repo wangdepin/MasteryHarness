@@ -447,21 +447,21 @@ const BOX: Record<PlanNodeStatus, string> = {
 	// 50%-opacity app background instead of true transparency: a routed
 	// edge passing behind the box composites UNDER the fill — dimmed to
 	// half, not shown straight through (owner, round 9).
-	visited: "fill-background/50 stroke-white",
-	current: "fill-background/50 stroke-white",
+	visited: "fill-background/50 stroke-plan-ink",
+	current: "fill-background/50 stroke-plan-ink",
 	// The grayed-out not-yet-visited look stays as-is (owner).
 	upcoming: "fill-card stroke-border",
 };
 const TEXT: Record<PlanNodeStatus, string> = {
-	visited: "fill-white text-xs",
-	current: "fill-white text-xs font-medium",
+	visited: "fill-plan-ink text-xs",
+	current: "fill-plan-ink text-xs font-medium",
 	upcoming: "fill-muted-foreground/80 text-xs",
 };
 // The in-chat block speaks the dock language now (owner, plan-hug
 // round 2026-10-07): boxes in the lighter background variant like
 // the composer/dock shells — but the outlines STAY white (owner
 // follow-up: the gray fill is good, white box edges).
-const MONO_BOX = "fill-card stroke-white";
+const MONO_BOX = "fill-card stroke-plan-ink";
 const MONO_TEXT = "fill-foreground text-xs";
 
 /** The diagram itself: positioned nodes + bezier edges. Pure-ish render —
@@ -555,7 +555,7 @@ export function PlanDiagram({
 				>
 					{/* The owner's arrowhead. The mouth (x 27.2) sits at refX so the
 					    line ends AT the notch — the tip beyond it is solid fill. */}
-					<path d={ARROW_HEAD} className="fill-white" />
+					<path d={ARROW_HEAD} className="fill-plan-ink" />
 				</marker>
 				{/* Same head, grayed — arrows into not-yet-visited nodes are
 				    grayed out like the nodes themselves (owner, round 6). */}
@@ -604,7 +604,7 @@ export function PlanDiagram({
 					<path
 						key={`${e.from}->${e.to}`}
 						d={edgePathD(pts, target)}
-						className={dim ? "fill-none stroke-border" : "fill-none stroke-white"}
+						className={dim ? "fill-none stroke-border" : "fill-none stroke-plan-ink"}
 						strokeWidth={STROKE_W}
 						markerEnd={`url(#${markerId}${dim ? "-dim" : ""})`}
 					/>
