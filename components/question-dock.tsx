@@ -854,9 +854,9 @@ function QuestionDockForm({
 									onEscape();
 									return;
 								}
-								// Chat convention: Enter submits, Shift+Enter is a newline;
-								// ⌘/Ctrl+Enter also submits (universal across the app).
-								if (e.key === "Enter" && (e.metaKey || e.ctrlKey || !e.shiftKey)) {
+								// Owner, 2026-10-21: in the answer fields ⌘/Ctrl+Enter submits and
+								// plain Enter is a newline (long answers get written, not sent).
+								if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
 									e.preventDefault();
 									submit();
 								}
@@ -883,10 +883,10 @@ function QuestionDockForm({
 									onEscape();
 									return;
 								}
-								// THE STANDARD CHORD (owner round 5, 2026-10-05): Enter
-								// submits, Shift+Enter is a newline, ⌘/Ctrl+Enter works
-								// too — identical to the practice dock and the composer.
-								if (e.key === "Enter" && (!e.shiftKey || e.metaKey || e.ctrlKey)) {
+								// Owner, 2026-10-21 (replaces round 5's Enter-submits): ⌘/Ctrl+Enter
+								// submits, plain Enter is a newline. The chat composer and the
+								// practice dock keep Enter-to-send.
+								if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
 									e.preventDefault();
 									submit();
 								}
@@ -903,7 +903,7 @@ function QuestionDockForm({
 					)}
 					<div className="flex items-center justify-between gap-2 p-1">
 						<span aria-hidden className="pl-1.5 text-xs text-muted-foreground">
-								{compactionRunning ? "compacting session…" : "↵ submits · ⇧↵ newline"}
+								{compactionRunning ? "compacting session…" : "⌘↵ submits · ↵ newline"}
 						</span>
 						<Button
 							type="submit"
