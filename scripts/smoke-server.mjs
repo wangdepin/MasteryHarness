@@ -25,6 +25,7 @@
  * way, same day).
  */
 import { spawn } from "node:child_process";
+import { probeEnv, verifyDemoRuntime } from "./smoke-demo-runtime.mjs";
 import { createRequire } from "node:module";
 import * as fs from "node:fs";
 import * as http from "node:http";
@@ -96,6 +97,9 @@ function get(url) {
 
 async function main() {
 	await checkOAuthFlows();
+	// HTTP boot alone never imports the dynamically loaded demo engine.
+	// Fail before packaging if its standalone dependency graph is incomplete.
+	verifyDemoRuntime(STANDALONE, RUNTIME);
 	const port = await freePort();
 	const url = `http://127.0.0.1:${port}`;
 	const home = fs.mkdtempSync(path.join(os.tmpdir(), "lh-smoke-"));
@@ -124,7 +128,7 @@ async function main() {
 	const child = spawn(RUNTIME, [SERVER], {
 		cwd: STANDALONE,
 		env: {
-			...process.env,
+			...probeEnv(process.env, home),
 			...(ELECTRON_MODE ? { ELECTRON_RUN_AS_NODE: "1" } : {}),
 			NODE_ENV: "production",
 			PORT: String(port),
