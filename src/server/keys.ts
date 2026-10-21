@@ -53,6 +53,7 @@ import {
 } from "../core/auth-keys.ts";
 import { authStore } from "../store/auth.ts";
 import { hasOAuthCredential } from "../store/oauth-credentials.ts";
+import { isSubscriptionProvider } from "../core/oauth-login.ts";
 
 // The once-per-process boot record — globalThis anchor (HMR re-imports the
 // module; the snapshot must not re-run and misread fill-gapped vars as real
@@ -199,10 +200,12 @@ export function keyValue(id: string): string | undefined {
  * Reads through keyValue — the SAME env-first lookup pi-ai performs
  * natively at every request — so an env-shadowed key counts as present
  * (gate by what would run). Providers absent from AUTH_PROVIDER_KEYS take
- * no key at all: nothing to gate, present by definition. */
+ * no key at all: present by definition, unless they are sign-in-only. */
 export function providerKeyPresent(provider: string): boolean {
 	const info = AUTH_PROVIDER_KEYS.find((p) => p.id === provider);
-	return info ? keyValue(info.envVar) !== undefined || hasOAuthCredential(provider) : true;
+	if (info) return keyValue(info.envVar) !== undefined || hasOAuthCredential(provider);
+	// Sign-in-only providers (Antigravity): present exactly when signed in.
+	return isSubscriptionProvider(provider) ? hasOAuthCredential(provider) : true;
 }
 
 /**

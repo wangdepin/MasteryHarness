@@ -22,6 +22,7 @@ import { BACKGROUND_MODEL_ROLES } from "../src/core/settings.ts";
 import { resolveSettings } from "../src/core/settings-resolution.ts";
 import { readSettings } from "../src/store/settings.ts";
 import { effectiveSettings } from "../src/server/stores.ts";
+import { providerKeyPresent } from "../src/server/keys.ts";
 
 // The model-control wave (2026-09-12): pi-ai owns the registry — these pins
 // hold our projection + validation honest against the shipped catalog, and
@@ -325,5 +326,16 @@ describe("pi thinking truth (pinned against pi-ai upgrades)", () => {
 	it("the legacy piEngineFor role entry point throws honestly (BYOK: no pins)", async () => {
 		const { piEngineFor } = await import("../src/agent/models.ts");
 		assert.throws(() => piEngineFor("prober"), /no configured model for role "prober"/);
+	});
+});
+describe("sign-in-only providers (Antigravity)", () => {
+	it("is a catalog provider without an API key, gated on the sign-in", () => {
+		const row = catalogProviders().find((p) => p.id === "antigravity");
+		assert.ok(row, "antigravity row exists even though it has no key");
+		assert.equal(row!.envVar, "");
+		// Not signed in on the test machine: its models stay out of the picker.
+		assert.equal(row!.keyPresent, false);
+		assert.ok(!modelCatalog().models.some((m) => m.provider === "antigravity"));
+		assert.equal(providerKeyPresent("antigravity"), false);
 	});
 });

@@ -35,6 +35,7 @@ import type {
 } from "../core/contracts/models.ts";
 import type { EffectiveModelSpec, EffectiveSlot } from "../core/settings-resolution.ts";
 import { AUTH_PROVIDER_KEYS } from "../core/auth-keys.ts";
+import { SUBSCRIPTION_PROVIDERS } from "../core/oauth-login.ts";
 import { BACKGROUND_MODEL_ROLES, MODEL_SLOTS, type BackgroundModelRole, type ModelSlotName, type ModelsSettings } from "../core/settings.ts";
 
 /** The picker's client-safe model entry (contract: core/contracts/models.ts). */
@@ -122,11 +123,19 @@ export function catalogSlots(): SlotPins {
  *  with keyPresent read env-wins through the keys seam, fresh per call —
  *  saving a key immediately federates the provider into the picker. */
 export function catalogProviders(): CatalogProvider[] {
-	return AUTH_PROVIDER_KEYS.map((p) => ({
+	const keyed = AUTH_PROVIDER_KEYS.map((p) => ({
 		id: p.id,
 		envVar: p.envVar,
 		keyPresent: keyValue(p.envVar) !== undefined || hasOAuthCredential(p.id),
-	})).sort((a, b) => a.id.localeCompare(b.id));
+	}));
+	// Sign-in-only providers (Antigravity) have no API key, so they are not in
+	// the key table: their models federate in on the sign-in alone.
+	const signInOnly = SUBSCRIPTION_PROVIDERS.filter((s) => !AUTH_PROVIDER_KEYS.some((p) => p.id === s.id)).map((s) => ({
+		id: s.id,
+		envVar: "",
+		keyPresent: hasOAuthCredential(s.id),
+	}));
+	return [...keyed, ...signInOnly].sort((a, b) => a.id.localeCompare(b.id));
 }
 
 /** The providers whose key is present — the picker federates exactly
