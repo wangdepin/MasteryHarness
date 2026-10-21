@@ -22,6 +22,7 @@ import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 import { piModels } from "../agent/models.ts";
 import { settingsStore } from "../store/settings.ts";
 import { effectiveSettings } from "./stores.ts";
+import { hasOAuthCredential } from "../store/oauth-credentials.ts";
 import { keyValue } from "./keys.ts";
 import type { ChatSettings } from "../core/contracts/chat.ts";
 import type {
@@ -124,7 +125,7 @@ export function catalogProviders(): CatalogProvider[] {
 	return AUTH_PROVIDER_KEYS.map((p) => ({
 		id: p.id,
 		envVar: p.envVar,
-		keyPresent: keyValue(p.envVar) !== undefined,
+		keyPresent: keyValue(p.envVar) !== undefined || hasOAuthCredential(p.id),
 	})).sort((a, b) => a.id.localeCompare(b.id));
 }
 

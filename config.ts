@@ -143,3 +143,11 @@ export const PROMPTS_OVERRIDE_DIR = path.join(DATA_ROOT, "prompts");
 export const AUTH_FILE = process.env.LH_AUTH_FILE
 	? path.resolve(process.env.LH_AUTH_FILE)
 	: path.join(ROOT, "auth.json");
+
+/**
+ * Subscription sign-in credentials (OAuth tokens: ChatGPT, Claude), owned by
+ * pi-ai's credential store contract — a sibling of auth.json so the desktop
+ * app's userData dir holds both (mode 0600). Kept apart from the flat
+ * {VAR: value} auth.json: these are structured, refreshed records.
+ */
+export const OAUTH_FILE = path.join(path.dirname(AUTH_FILE), "oauth-credentials.json");

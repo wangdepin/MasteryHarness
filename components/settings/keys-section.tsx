@@ -27,6 +27,7 @@ import { useEffect, useRef, useState } from "react";
 import { AUTH_KEYS, type AuthKeyStatus } from "@/src/core";
 import { SettingsGroup } from "./controls.tsx";
 import { ProviderMenuList } from "./model-menu.tsx";
+import { SubscriptionLogin } from "./subscription-login.tsx";
 import { MenuShell } from "@/components/menu-shell";
 import { notifySettingsSaved } from "@/components/settings-signal";
 
@@ -447,6 +448,8 @@ export function KeysSection({
 					</div>
 				)}
 			</SettingsGroup>
+
+			<SubscriptionLogin />
 
 			<SettingsGroup label="Tools & services" testid="group-tool-keys">
 				{toolRows.map((status) => (

@@ -6,11 +6,16 @@
  * file (and the adapter implementations in src/store/).
  */
 
+import { bindCredentialStore } from "../agent/models.ts";
 import { chatStore } from "../store/chats.ts";
 import { graphStore } from "../store/graph.ts";
 import { jobStore } from "../store/jobs.ts";
+import { oauthCredentialStore } from "../store/oauth-credentials.ts";
 import { settingsStore } from "../store/settings.ts";
 import { resolveSettings, type EffectiveSettings } from "../core/settings-resolution.ts";
+// Subscription sign-in tokens: pi-ai reads/refreshes them through this file store.
+bindCredentialStore(oauthCredentialStore);
+
 /** The wired adapters. Satisfies core/graph.ts's GraphDeps structurally. */
 export const stores = {
 	chatStore,
