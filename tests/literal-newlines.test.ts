@@ -31,4 +31,17 @@ describe("restoreLiteralNewlines — display-time repair of double-escaped newli
 		assert.equal(restoreLiteralNewlines("plain\ntext"), "plain\ntext");
 		assert.equal(restoreLiteralNewlines(""), "");
 	});
+
+	it("restores a code block that arrived on ONE line, and \\n before a plain word", () => {
+		const q = 'Consider this:\\n\\n```python\\nx = [1]\\nwhile x:\\n    x.pop()\\n```\\nAfter this loop, what is len(x)?';
+		assert.equal(
+			restoreLiteralNewlines(q),
+			'Consider this:\n\n```python\nx = [1]\nwhile x:\n    x.pop()\n```\nAfter this loop, what is len(x)?',
+		);
+	});
+
+	it("still keeps TeX n-commands but not words that merely start like one", () => {
+		assert.equal(restoreLiteralNewlines("$a \\neq b$ and \\nExample"), "$a \\neq b$ and \nExample");
+		assert.equal(restoreLiteralNewlines("\\nu is a letter; \\nupdate"), "\\nu is a letter; \nupdate");
+	});
 });
