@@ -67,6 +67,14 @@ const nextConfig: NextConfig = {
 			// per-platform-binary story as the canvas above (one per build).
 			"node_modules/@resvg/resvg-js-*/**/*",
 			"node_modules/@earendil-works/pi-ai/dist/providers/data/**/*",
+			// Subscription sign-in (2026-10-21): pi-ai loads each OAuth flow through
+			// a variable specifier (auth/oauth/load.js) so bundlers cannot follow
+			// it — the tracer misses every flow module, and the packaged app's
+			// Sign in dies with "Cannot find module" for oauth/anthropic.js.
+			"node_modules/@earendil-works/pi-ai/dist/auth/oauth/**/*",
+			// An include does not follow requires: the two utils the flows import.
+			"node_modules/@earendil-works/pi-ai/dist/utils/oauth-page.js",
+			"node_modules/@earendil-works/pi-ai/dist/utils/sleep.js",
 			// The "data/**/*" exclude above also strips this dir (its name ends
 			// in "-data"; verified 2026-10-19 — "**/data/**/*" does too, and
 			// "**/!(*-)data/**/*" keeps it but leaks the repo's data/). launch.js

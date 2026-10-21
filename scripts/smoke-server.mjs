@@ -31,6 +31,7 @@ import * as http from "node:http";
 import * as net from "node:net";
 import * as os from "node:os";
 import * as path from "node:path";
+import { pathToFileURL } from "node:url";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const STANDALONE = path.join(ROOT, ".next", "standalone");
@@ -46,6 +47,24 @@ const PROBES = ["/api/graph", "/api/models", "/api/settings"];
 if (!fs.existsSync(SERVER)) {
 	console.error("[smoke-server] .next/standalone/server.js missing — run next build first.");
 	process.exit(1);
+}
+
+/**
+ * Subscription sign-in (2026-10-21): pi-ai imports each OAuth flow through a
+ * variable specifier the tracer cannot follow, so a trace regression ships a
+ * server that boots fine and then dies on "Sign in". Import every flow module
+ * the way pi-ai does, from the packaged payload.
+ */
+async function checkOAuthFlows() {
+	const dir = path.join(STANDALONE, "node_modules", "@earendil-works", "pi-ai", "dist", "auth", "oauth");
+	for (const name of ["anthropic.js", "openai-chatgpt.js"]) {
+		try {
+			await import(pathToFileURL(path.join(dir, name)).href);
+		} catch (err) {
+			console.error(`[smoke-server] OAuth flow ${name} does not load from the payload: ${err.message}`);
+			process.exit(1);
+		}
+	}
 }
 
 /** A free TCP port (listen(0) → the kernel assigns one) — mirrors main.cjs. */
@@ -76,6 +95,7 @@ function get(url) {
 }
 
 async function main() {
+	await checkOAuthFlows();
 	const port = await freePort();
 	const url = `http://127.0.0.1:${port}`;
 	const home = fs.mkdtempSync(path.join(os.tmpdir(), "lh-smoke-"));
