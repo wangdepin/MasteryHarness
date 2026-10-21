@@ -28,6 +28,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { after, afterEach, describe, it } from "node:test";
 import { createFauxCore, fauxAssistantMessage, fauxText, fauxToolCall, type AssistantMessage, type FauxResponseStep } from "@earendil-works/pi-ai";
+import { runResearcherAgent } from "../src/agent/subagents/researcher.ts";
 import {
 	accumulateJobUsage,
 	buildAbortSteer,
@@ -1775,5 +1776,21 @@ describe("composer steering: steerLiveChat + the deliver-or-requeue lifecycle", 
 		assert.deepEqual((next.handed[0] as { id: string }).id, "steer_s1");
 		unregisterLiveAgent(chatId);
 		reconcileUserSteers(chatId, [stranded, delivered] as never); // cleanup
+	});
+});
+
+describe("researcher turn cap (owner, 2026-10-21)", () => {
+	it("writes the brief in a wrap-up turn when the loop spends every turn on tool calls", async () => {
+		const searches = Array.from({ length: 12 }, (_, i) =>
+			fauxAssistantMessage([fauxToolCall("web_search", { query: `q${i}` }, { id: `ws${i}` })], { stopReason: "toolUse" }),
+		);
+		const engine = fauxEngine([...searches, fauxAssistantMessage([fauxText(BRIEF)])]);
+		const brief = await runResearcherAgent("Find the latest sigma.js", { engine, search: () => stubSearch() });
+		assert.equal(brief, BRIEF);
+	});
+
+	it("an immediate brief needs no wrap-up turn", async () => {
+		const engine = fauxEngine([fauxAssistantMessage([fauxText(BRIEF)])]);
+		assert.equal(await runResearcherAgent("Find it", { engine, search: () => stubSearch() }), BRIEF);
 	});
 });

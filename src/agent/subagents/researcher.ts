@@ -65,6 +65,12 @@ Numbered findings with inline source citations:
 ## Gaps
 What couldn't be answered. Suggested next steps.`;
 
+/** Model calls the research loop may spend before the wrap-up turn. */
+export const RESEARCH_MAX_TURNS = 12;
+
+const WRAP_UP_PROMPT =
+	"Your search budget is spent. Do not call any more tools. Write the final brief now, in the required format, from what you have already found.";
+
 export interface ResearcherRunOptions {
 	engine?: PiEngine;
 	/** The search seam (search port wave, 2026-09-20): resolves the LIVE
@@ -93,18 +99,29 @@ export interface ResearcherRunOptions {
 export async function runResearcherAgent(prompt: string, opts: ResearcherRunOptions = {}): Promise<string> {
 	const tools = Object.values(createWebTools(opts.search ?? (() => null)));
 	if (opts.pdfDir) tools.push(...Object.values(createPdfReadTools(opts.pdfDir)));
-	const { text } = await runSubagent(tools, {
-		role: "researcher",
-		prompt,
+	const shared = {
+		role: "researcher" as const,
 		engine: opts.engine,
 		systemPrompt: INSTRUCTIONS,
-		maxTurns: 12,
 		abortSignal: opts.abortSignal,
 		onUsage: opts.onUsage,
 		onToolStart: opts.onToolStart,
 		chatId: opts.chatId,
+	};
+	const first = await runSubagent(tools, { ...shared, prompt, maxTurns: RESEARCH_MAX_TURNS });
+	if (first.text.trim() !== "") return first.text;
+
+	// The loop ran out of turns while still calling tools, so no brief was
+	// written (owner, 2026-10-21: "produced no text" after exactly 12 steps).
+	// One wrap-up turn keeps everything already found instead of discarding
+	// it. The tools stay declared — the transcript holds tool calls, which
+	// providers expect to see declared — and the instruction forbids using them.
+	const wrapUp = await runSubagent(tools, {
+		...shared,
+		messages: [...first.newMessages, { role: "user", content: WRAP_UP_PROMPT, timestamp: Date.now() }],
+		maxTurns: 2,
 	});
-	return text;
+	return wrapUp.text;
 }
 
 export type ResearcherAgent = ReturnType<typeof runResearcherAgent>;
