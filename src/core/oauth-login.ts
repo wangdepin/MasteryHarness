@@ -4,11 +4,13 @@
  * /api/auth/oauth routes. No I/O.
  */
 
-/** Providers offered for subscription sign-in this wave (owner scope:
- *  ChatGPT and Claude; pi-ai's own login flows do the work). */
+/** Providers offered for subscription sign-in (owner scope: ChatGPT and
+ *  Claude through pi-ai's own login flows, plus Google Antigravity through
+ *  the vendored provider in src/agent/providers/antigravity). */
 export const SUBSCRIPTION_PROVIDERS: readonly { id: string; label: string }[] = [
 	{ id: "openai", label: "ChatGPT" },
 	{ id: "anthropic", label: "Claude" },
+	{ id: "antigravity", label: "Google (Antigravity)" },
 ];
 
 export function isSubscriptionProvider(id: unknown): id is string {

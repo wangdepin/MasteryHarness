@@ -11,6 +11,7 @@ import {
 	type StreamFunction,
 } from "@earendil-works/pi-ai";
 import { builtinProviders } from "@earendil-works/pi-ai/providers/all";
+import { antigravityProvider } from "./providers/antigravity/index.ts";
 import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 import { type ModelRole } from "../../config.ts";
 import { DEFAULT_THINKING_ORDER } from "../core/settings.ts";
@@ -88,6 +89,7 @@ export function piModels() {
 	if (!collection) {
 		collection = createModels({ credentials: credentialProxy });
 		for (const provider of builtinProviders()) collection.setProvider(provider);
+		collection.setProvider(antigravityProvider());
 	}
 	return collection;
 }

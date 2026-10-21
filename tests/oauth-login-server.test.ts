@@ -21,9 +21,9 @@ const until = async (check: () => boolean) => {
 };
 
 describe("subscription login sessions", () => {
-	it("offers ChatGPT and Claude with their plan names", () => {
+	it("offers ChatGPT, Claude and Antigravity with their plan names", () => {
 		const rows = oauthProviderRows();
-		assert.deepEqual(rows.map((r) => r.id), ["openai", "anthropic"]);
+		assert.deepEqual(rows.map((r) => r.id), ["openai", "anthropic", "antigravity"]);
 		assert.ok(rows.every((r) => r.planName.length > 0));
 	});
 

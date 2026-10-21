@@ -136,7 +136,7 @@ function ProviderRow({ row, onChanged }: { row: OAuthProviderRow; onChanged: () 
 								value={code}
 								onChange={(e) => setCode(e.target.value)}
 								onKeyDown={(e) => e.key === "Enter" && void submitCode()}
-								placeholder="Authorization code"
+								placeholder="Authorization code or callback URL"
 								className="min-w-0 flex-1 rounded-sm border border-border bg-background px-2 py-1 text-foreground"
 							/>
 							<button type="button" onClick={() => void submitCode()} className="hover:text-foreground">
@@ -169,6 +169,11 @@ export function SubscriptionLogin() {
 			<p className="px-1 pt-1 text-[11px] leading-relaxed text-muted-foreground/70">
 				Uses your own plan instead of an API key. Third-party use of a subscription may be against the provider&apos;s terms and could put the account at risk.
 			</p>
+			{rows.some((r) => r.id === "antigravity") && (
+				<p className="px-1 pt-1 text-[11px] leading-relaxed text-muted-foreground/70" data-testid="antigravity-disclaimer">
+					Google (Antigravity) is an unofficial route: it signs in as Google&apos;s Antigravity app and calls internal endpoints that can change or stop working at any time. Use an account you can afford to lose.
+				</p>
+			)}
 		</SettingsGroup>
 	);
 }
