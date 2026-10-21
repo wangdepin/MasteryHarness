@@ -79,6 +79,7 @@ import {
 import { ReadingThinkingField } from "@/components/reading-thinking";
 import { QuoteSelection } from "@/components/quote-selection";
 import { appendQuote } from "@/components/quote-selection-dom";
+import { SentenceReader, SentenceReaderButton } from "@/components/sentence-reader";
 import { currentUserThinkingOpen, setAllUserThinkingOpen } from "@/components/thinking-block";
 import { slotsConfigured, type ModelsSettings } from "@/src/core";
 import { useSettingsSaved } from "@/components/settings-signal";
@@ -810,6 +811,7 @@ export function Chat({
 	// The live plan popup (wave 4): opened by any transcript plan block, the
 	// top-bar plan chip, and the dock band's marginalia.
 	const [planOpen, setPlanOpen] = useState(false);
+	const [readerText, setReaderText] = useState<string | null>(null);
 	// Real plan presence — gates the marginalia's clickable flank. A JSX
 	// element is always truthy; gating on the node alone mounted a phantom
 	// (invisible, clickable) button in the bottom-right whenever a question
@@ -1474,6 +1476,9 @@ export function Chat({
 														const anchor = sourceId && sourceTextParts.get(sourceId) === part.id ? messageAnchorId(sourceId) : undefined;
 														return (
 															<div key={part.id || pi} id={anchor} data-source-message-id={sourceId ?? undefined} className="lh-source-passage">
+																{!(status === "streaming" && isLastPart) && (part.text ?? "").trim() !== "" && (
+																	<SentenceReaderButton onOpen={() => setReaderText(part.text ?? "")} />
+																)}
 																<MessageResponse>{part.text}</MessageResponse>
 															</div>
 														);
@@ -1682,6 +1687,7 @@ export function Chat({
 					/>
 				)}
 				{planOpen && <PlanPopup messages={messages} onClose={() => setPlanOpen(false)} />}
+				{readerText !== null && <SentenceReader text={readerText} onClose={() => setReaderText(null)} />}
 				<AbortTurnDialog mode={abortAsk} onClose={() => setAbortAsk(null)} onConfirm={confirmAbort} busy={busy} />
 				</div>
 			</div>

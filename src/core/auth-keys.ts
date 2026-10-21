@@ -37,6 +37,12 @@ export const AUTH_KEYS: readonly AuthKeyInfo[] = [
 		docsUrl: "https://console.deepgram.com/",
 	},
 	{
+		id: "ELEVENLABS_API_KEY",
+		label: "ElevenLabs",
+		description: "Text-to-speech key for the sentence reader's read-aloud. Without it the reader uses the browser's built-in voice.",
+		docsUrl: "https://elevenlabs.io/app/settings/api-keys",
+	},
+	{
 		id: "TAVILY_API_KEY",
 		label: "Tavily",
 		description: "Web-search engine for the researcher sub-agent (AI-native search API). Setting the key activates it — no engine toggle needed.",
@@ -161,6 +167,7 @@ export function validateKeyShape(id: string, rawValue: string): KeyShapeResult {
 		case "BRAVE_API_KEY":
 			// No public format — a length floor + paste hygiene only.
 			return nonEmpty(20);
+		case "ELEVENLABS_API_KEY":
 		case "DEEPGRAM_API_KEY":
 			// No public format — the length floor only catches truncated pastes.
 			return nonEmpty(20);
