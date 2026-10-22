@@ -1,4 +1,4 @@
-# Open Academy
+# MasteryHarness
 
 **An agent harness for learning. A fork of [LearnHarness](https://github.com/amosblomqvist/learnharness).**
 
@@ -9,9 +9,9 @@
   <a href="https://github.com/wangdepin/open-academy/issues">Issues</a>
 </p>
 
-> Open Academy is a fork of LearnHarness by Amos Blomqvist and tracks its main branch. It is not affiliated with or endorsed by the upstream project. The teaching engine, knowledge graph, and most of the app are upstream's work; the changes listed below are this fork's.
+> MasteryHarness is a fork of LearnHarness by Amos Blomqvist and tracks its main branch. It is not affiliated with or endorsed by the upstream project. The teaching engine, knowledge graph, and most of the app are upstream's work; the changes listed below are this fork's.
 
-Open Academy uses AI agents to plan and teach lessons from your current understanding to your goal. It builds a detailed picture of what you understand and how you reason, and updates it as you learn. Teaching builds understanding one reasoning step at a time, practice makes it usable, and a persistent knowledge graph carries it across sessions.
+MasteryHarness uses AI agents to plan and teach lessons from your current understanding to your goal. It builds a detailed picture of what you understand and how you reason, and updates it as you learn. Teaching builds understanding one reasoning step at a time, practice makes it usable, and a persistent knowledge graph carries it across sessions.
 
 ![Teaching session](docs/assets/teaching-session.png)
 
@@ -67,7 +67,7 @@ Want the official app? Download LearnHarness from [learnharness.ai](https://lear
 
 ## Relationship to upstream
 
-Open Academy tracks [LearnHarness](https://github.com/amosblomqvist/learnharness) and last merged upstream 0.3.2. Credit for the original app goes to Amos Blomqvist. Model access is built on [pi-ai](https://github.com/earendil-works/pi).
+MasteryHarness tracks [LearnHarness](https://github.com/amosblomqvist/learnharness) and last merged upstream 0.3.2. Credit for the original app goes to Amos Blomqvist. Model access is built on [pi-ai](https://github.com/earendil-works/pi).
 
 ## License
 
