@@ -6,7 +6,7 @@
   <a href="#whats-different-in-this-fork">What's different</a> ·
   <a href="#how-it-works">How it works</a> ·
   <a href="#install">Install</a> ·
-  <a href="https://github.com/wangdepin/open-academy/issues">Issues</a>
+  <a href="https://github.com/wangdepin/MasteryHarness/issues">Issues</a>
 </p>
 
 > MasteryHarness is a fork of LearnHarness by Amos Blomqvist and tracks its main branch. It is not affiliated with or endorsed by the upstream project. The teaching engine, knowledge graph, and most of the app are upstream's work; the changes listed below are this fork's.
@@ -25,7 +25,7 @@ MasteryHarness uses AI agents to plan and teach lessons from your current unders
 - **Answer fields.** Cmd+Enter submits; Enter inserts a newline.
 - **Packaging and fixes.** The packaged server ships pi-ai's OAuth flow modules, the researcher gets a wrap-up turn when it spends every turn on tools, literal `\n` in questions and one-line code fences renders correctly, and `pi-ai` / `pi-agent-core` are bumped to 1.3.0.
 
-Everything else behaves as in upstream. See the [commit history](https://github.com/wangdepin/open-academy/commits/main) for the exact changes.
+Everything else behaves as in upstream. See the [commit history](https://github.com/wangdepin/MasteryHarness/commits/main) for the exact changes.
 
 ## How it works
 
@@ -47,8 +47,8 @@ The screenshots are from upstream's interface.
 **Prebuilt installers: coming soon.** For now, build from source:
 
 ```bash
-git clone https://github.com/wangdepin/open-academy.git
-cd open-academy
+git clone https://github.com/wangdepin/MasteryHarness.git
+cd MasteryHarness
 npm install
 npm run dev        # http://localhost:3000
 npm test           # deterministic, no LLM, no network
