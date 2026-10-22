@@ -44,7 +44,10 @@ export interface CodeRunResult {
 	durationMs: number;
 }
 
-/** What a language backend implements (the Pyodide Worker is the first). */
+/** What a language backend implements (the Pyodide runner is the first).
+ *  `run` resolves for anything the code did — errors, failed checks and
+ *  timeouts are results. It rejects only when the runtime itself is
+ *  unavailable. */
 export interface CodeRuntime {
 	language: CodeLanguage;
 	run(request: CodeRunRequest): Promise<CodeRunResult>;
