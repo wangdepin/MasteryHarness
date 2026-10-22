@@ -51,13 +51,15 @@ import { AbortTurnDialog, type AbortMode } from "@/components/abort-turn-dialog"
 import { ArrowRightIcon, DumbbellIcon, WaypointsIcon } from "lucide-react";
 import type { PlanBlockData } from "@/src/core";
 import { QuestionDock } from "@/components/question-dock";
+import { CodeExerciseDockHost } from "@/components/code-exercise-dock-host";
+import { CodeExerciseAnsweredCard } from "@/components/code-exercise-answered-card";
 import { SessionFind } from "@/components/session-find";
 import { SessionMessageNavigation } from "@/components/session-navigation";
 import { PracticeDock } from "@/components/practice-dock";
 import { ThinkingCard, type PracticeThinkingData } from "@/components/practice-cards";
 import { GraphContextCard, type GraphContextData } from "@/components/graph-context-card";
 import { TopBar } from "@/components/top-bar";
-import type { ArtifactPartProps, JobRecord, Phase3, QuestionAnswerData, TurnUsage } from "@/src/core";
+import type { AnswerData, ArtifactPartProps, CodeExerciseAnswerData, JobRecord, Phase3, QuestionAnswerData, TurnUsage } from "@/src/core";
 import type { LhViewMessage } from "@/src/core";
 import { PhaseChip, PhaseDivider } from "@/components/phase-divider";
 import {
@@ -68,7 +70,10 @@ import {
 import { CoverageRing } from "@/components/extraction-coverage";
 import {
 	activeProblemOf,
+	CODE_EXERCISE_TOOL,
 	dismissedAnswer,
+	dismissedCodeAnswer,
+	parseCodeExerciseInput,
 	findPendingToolCall,
 	phaseAt3,
 	phaseTimeline,
@@ -406,11 +411,19 @@ export function Chat({
 				const question = (p.input as { question?: string } | null)?.question ?? "";
 				const reading = readingThinkingRef.current.trim() || undefined;
 				clearReadingThinking();
-				const answer = dismissedAnswer(toolQuestionKind(p.tool), question);
-				void dismissQuestion(
-					p.toolCallId,
-					reading ? { ...answer, readingThinking: reading } : answer,
-				);
+				const kind = toolQuestionKind(p.tool);
+				if (kind === "code-exercise") {
+					// Code exercises have no reading-thinking channel: the draft is
+					// cleared above and never rides this answer.
+					const exercise = parseCodeExerciseInput(p.input);
+					void dismissQuestion(
+						p.toolCallId,
+						dismissedCodeAnswer({ language: exercise?.language ?? "python", question: exercise?.question ?? question }),
+					);
+				} else {
+					const answer = dismissedAnswer(kind, question);
+					void dismissQuestion(p.toolCallId, reading ? { ...answer, readingThinking: reading } : answer);
+				}
 				if (busyRef.current) abortInFlightTurn();
 				return;
 			}
@@ -1518,6 +1531,12 @@ export function Chat({
 														}
 														return null;
 													}
+													case "tool-code-exercises": {
+														if (part.state === "output-available") {
+															return <CodeExerciseAnsweredCard key={pi} answer={part.output as CodeExerciseAnswerData} />;
+														}
+														return null;
+													}
 													default: {
 														// A tool call being WRITTEN (owner, streaming round 2026-10-01):
 														// input-streaming spans the whole execution, and the live card —
@@ -1667,7 +1686,12 @@ export function Chat({
 						// check answer is its only carrier.
 						const reading = readingThinkingRef.current.trim() || undefined;
 						clearReadingThinking();
-						submitAnswer(pending.tool, pending.toolCallId, reading ? { ...output, readingThinking: reading } : output);
+						// Code exercises carry no reading-thinking channel.
+						submitAnswer(
+							pending.tool,
+							pending.toolCallId,
+							reading && output.kind !== "code-exercise" ? { ...output, readingThinking: reading } : output,
+						);
 					}}
 				/>
 				</Conversation>
@@ -1864,7 +1888,7 @@ function DockOverlay({
 	/** The session's usage log — the stats bar beneath the composer folds it. */
 	turns: TurnUsage[];
 	composer: React.ReactNode;
-	onSubmitAnswer: (output: QuestionAnswerData) => void;
+	onSubmitAnswer: (output: AnswerData) => void;
 	/** The model control's pass-through (the stats bar hosts it). */
 	chatId: string;
 	/** Reports the dock's settled height (block + gradient) — ChatView's
@@ -2309,7 +2333,15 @@ function DockOverlay({
 						key={mode}
 						className={mode === initialModeRef.current ? undefined : "dock-variant"}
 					>
-							{pending ? (
+							{pending?.tool === CODE_EXERCISE_TOOL ? (
+								<CodeExerciseDockHost
+									input={pending.input}
+									expanded={expanded}
+									onExpand={expandAndReveal}
+									onSubmit={onSubmitAnswer}
+									compactionRunning={compactionRunning}
+								/>
+							) : pending ? (
 								<QuestionDock
 									toolName={pending.tool as "quiz" | "probe" | "ask_user_question" | "explain" | "recall"}
 									toolCallId={pending.toolCallId}

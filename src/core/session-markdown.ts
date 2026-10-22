@@ -20,6 +20,7 @@
  * learning evidence); custom markers are invisible, same as the view.
  */
 
+import { CODE_EXERCISE_TOOL } from "./code-exercise.ts";
 import type { LhMessage } from "./native-messages.ts";
 import {
 	PRACTICE_CONCLUDE_TOOL,
@@ -113,6 +114,21 @@ function toolResultBody(result: ToolResultMessage, ctx?: MarkdownContext): { hea
 		else if (typeof out?.text === "string" && out.text.trim()) body.push(`The learner answered in his own words: ${out.text.trim()}`);
 		if (typeof out?.note === "string" && out.note) body.push(`*(his thinking: ${out.note})*`);
 		return { heading, body };
+	}
+
+	if (result.toolName === CODE_EXERCISE_TOOL) {
+		const code = result.details as
+			| Partial<{ questionText: string; graded: boolean; runs: number; dismissed: boolean; lastRun: { passed?: boolean; error?: string; timedOut?: boolean } }>
+			| undefined;
+		const question = typeof code?.questionText === "string" && code.questionText ? code.questionText : "(no question text)";
+		const body = [`**Q:** ${question}`];
+		if (code?.dismissed === true) body.push("The learner skipped this exercise.");
+		else if (code?.graded === true && code.lastRun?.passed === true) body.push("The learner's code passed the checks.");
+		else if (code?.graded === true) body.push("The learner's code did not pass the checks.");
+		else if (code?.lastRun?.timedOut === true) body.push("The learner's code timed out.");
+		else if (typeof code?.lastRun?.error === "string") body.push("The learner's code raised an error.");
+		else body.push("The learner ran their code.");
+		return { heading: "Code exercise", body };
 	}
 
 	if (ctx !== undefined && result.toolName === PRACTICE_PROBLEM_TOOL) {

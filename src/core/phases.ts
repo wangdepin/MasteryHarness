@@ -48,6 +48,8 @@ export interface PhaseMessage {
 	parts: ReadonlyArray<{ type: string; state?: string; input?: unknown; output?: unknown }>;
 }
 
+import { isPositionTool, isPositionToolPart } from "./pending.ts";
+
 /** A quiz call's part input carries `nodeId` iff it is tagged (teach-only —
  *  the probe quiz schema has no nodeId field). */
 function taggedNodeId(input: unknown): boolean {
@@ -87,7 +89,7 @@ function advance(
 		// explain, whichever mechanic the settings armed (both carry nodeId).
 		if (
 			phase === "plan" &&
-			(part.type === "tool-quiz" || part.type === "tool-explain") &&
+			isPositionToolPart(part.type) &&
 			taggedNodeId(part.input)
 		) {
 			phase = "teach";
@@ -122,7 +124,7 @@ export function teachStepIndex(
 			continue;
 		}
 		if (
-			(part.type === "tool-quiz" || part.type === "tool-explain") &&
+			isPositionToolPart(part.type) &&
 			taggedNodeId(part.input)
 		) {
 			// The call's governing step: 0–1 step-starts seen = the message's
@@ -181,7 +183,8 @@ export function phaseAt3Lh(messages: readonly LhMessage[], upToIndex?: number): 
 				for (const block of content) {
 					if (
 						block.type === "toolCall" &&
-						(block.name === "quiz" || block.name === "explain") &&
+						block.name !== undefined &&
+						isPositionTool(block.name) &&
 						taggedNodeId(block.arguments)
 					) {
 						phase = "teach";

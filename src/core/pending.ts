@@ -5,6 +5,8 @@
  * toolCallId. The server-side record scans (danglingQuestionOf over native
  * LhMessage[]) live in native-messages.ts.
  */
+import { CODE_EXERCISE_TOOL } from "./code-exercise.ts";
+
 interface UIMessage {
 	role?: string;
 	parts: Array<Record<string, unknown> & { type: string }>;
@@ -48,12 +50,28 @@ export const QUESTION_TOOLS = [
 	"ask_user_question",
 	"explain",
 	"recall",
+	CODE_EXERCISE_TOOL,
 ] as const;
+
+/** The teach-phase tools whose `nodeId` marks the plan position and whose
+ *  first tagged call flips plan → teach (all carry the validated nodeId). */
+const POSITION_TOOLS: readonly string[] = ["quiz", "explain", CODE_EXERCISE_TOOL];
+
+/** Does this tool name (not the `tool-` part type) tag the plan position? */
+export function isPositionTool(name: string): boolean {
+	return POSITION_TOOLS.includes(name);
+}
+
+/** The same test over a view part's `tool-<name>` type. */
+export function isPositionToolPart(partType: string): boolean {
+	return partType.startsWith("tool-") && isPositionTool(partType.slice("tool-".length));
+}
 
 /** The tool→kind map (the dock's own fold, named once — the dismissal
  *  path and the dock must never disagree on what a tool is). The probe
  *  names fold onto their teach kinds — the dock is kind-driven. */
-export function toolQuestionKind(tool: string): "quiz" | "ask" | "explain" {
+export function toolQuestionKind(tool: string): "quiz" | "ask" | "explain" | "code-exercise" {
+	if (tool === CODE_EXERCISE_TOOL) return "code-exercise";
 	return tool === "quiz" || tool === "probe" ? "quiz" : tool === "explain" || tool === "recall" ? "explain" : "ask";
 }
 

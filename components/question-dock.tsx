@@ -29,6 +29,7 @@ import {
 	type ExplainToolInput,
 	type QuestionAnswerData,
 	type QuestionData,
+	type QuestionKind,
 	type QuestionMode,
 	type QuizToolInput,
 	type SelectMode,
@@ -197,7 +198,7 @@ export function QuestionDockBar({
 	label,
 	toolLabel,
 }: {
-	toolName: "quiz" | "ask_user_question" | "explain";
+	toolName: "quiz" | "ask_user_question" | "explain" | "code-exercises";
 	question: string;
 	onExpand: () => void;
 	variant?: "collapsed" | "reveal";
@@ -240,7 +241,13 @@ export function QuestionDockBar({
 			<span className="shrink-0 text-xs font-medium uppercase tracking-wide text-muted-foreground">
 				{label ??
 							toolLabel ??
-							(toolName === "quiz" ? "Check" : toolName === "explain" ? "Explain" : "Question")}
+							(toolName === "quiz"
+								? "Check"
+								: toolName === "explain"
+									? "Explain"
+									: toolName === "code-exercises"
+										? "Code"
+										: "Question")}
 			</span>
 			<span className="min-w-0 flex-1 truncate text-muted-foreground">{teaserText(question)}</span>
 			<span className="flex shrink-0 items-center gap-1 text-xs font-medium">
@@ -262,7 +269,10 @@ function QuestionDockForm({
 	dictationClaim = true,
 	compactionRunning = false,
 }: Omit<QuestionDockProps, "expanded" | "onExpand" | "reveal">) {
-	const kind = toolQuestionKind(toolName);
+	// QuestionDock never receives code-exercises (DockOverlay routes them to
+	// CodeExerciseDockHost); the fold's "ask" default covers the unreachable case.
+	const toolKind = toolQuestionKind(toolName);
+	const kind: QuestionKind = toolKind === "code-exercise" ? "ask" : toolKind;
 
 	// Canonical QuestionData, built once per question. Quiz options are
 	// deterministically shuffled (seeded by toolCallId) so position never leaks

@@ -25,7 +25,7 @@
  * turn rides one composition.
  */
 
-import type { QuestionAnswerData } from "./question-core.ts";
+import type { AnswerData } from "./answers.ts";
 import type { LhMessage } from "./native-messages.ts";
 import {
 	activeProblemOf,
@@ -43,7 +43,7 @@ import { QUESTION_TOOLS, toolQuestionKind } from "./pending.ts";
 /** One client-originated input event (the POST body's `input`). */
 export type ChatInput =
 	| { type: "text"; text: string }
-	| { type: "answer"; toolCallId: string; answer: QuestionAnswerData }
+	| { type: "answer"; toolCallId: string; answer: AnswerData }
 	| { type: "continue" }
 	/** The practice dock's two buttons (owner, 2026-10-04): the learner's
 	 *  thinking on the ACTIVE problem — one lane (owner 2026-10-05):
@@ -73,7 +73,7 @@ export type TurnInput = ChatInput | SteerInput;
  *  wake-free. Parallel question calls each get their own dismiss event;
  *  results reference their calls by id, so the appends stay independent. */
 export type DismissInput =
-	| { type: "dismiss"; toolCallId: string; answer: QuestionAnswerData }
+	| { type: "dismiss"; toolCallId: string; answer: AnswerData }
 	/** The problem discard (practice, owner 2026-10-04): ask-style — the
 	 *  silent route appends the UI-only marker and wakes nothing; the
 	 *  conclude pair rides the user's NEXT input (inputAppends). */
@@ -93,7 +93,7 @@ export function parseDismissInput(input: unknown): DismissInput {
 	if (typeof i.toolCallId !== "string" || i.toolCallId.length === 0) {
 		throw new ChatInputError("dismiss input requires toolCallId");
 	}
-	const answer = i.answer as QuestionAnswerData | undefined;
+	const answer = i.answer as AnswerData | undefined;
 	if (typeof answer !== "object" || answer === null) {
 		throw new ChatInputError("dismiss input requires the dismissal answer object");
 	}
@@ -167,7 +167,7 @@ export function parseChatInput(input: unknown): ChatInput {
 			if (typeof i.answer !== "object" || i.answer === null) {
 				throw new ChatInputError("answer input requires the graded answer object");
 			}
-			return { type: "answer", toolCallId: i.toolCallId, answer: i.answer as QuestionAnswerData };
+			return { type: "answer", toolCallId: i.toolCallId, answer: i.answer as AnswerData };
 		case "continue":
 			return { type: "continue" };
 		case "thinking":

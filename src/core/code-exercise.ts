@@ -22,6 +22,9 @@ import { Type, type Static } from "typebox";
 
 // ─── languages + the runtime seam ───────────────────────────────────────────
 
+/** The model-facing tool name. */
+export const CODE_EXERCISE_TOOL = "code-exercises";
+
 /** The languages an exercise can be written in. One runtime per entry. */
 export const CODE_LANGUAGES = ["python"] as const;
 export type CodeLanguage = (typeof CODE_LANGUAGES)[number];
@@ -148,6 +151,12 @@ export interface CodeExerciseAnswerData {
 	explanation?: string;
 	dismissed?: boolean;
 	answeredAt: string;
+}
+
+/** Is this persisted answer a code exercise's? (The answer wire carries
+ *  `unknown`; `kind` is the discriminant against question-core's answers.) */
+export function isCodeExerciseAnswer(answer: unknown): answer is CodeExerciseAnswerData {
+	return typeof answer === "object" && answer !== null && (answer as { kind?: unknown }).kind === "code-exercise";
 }
 
 /** Fold a submission into the answer record. */

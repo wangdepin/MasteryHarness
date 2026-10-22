@@ -12,6 +12,11 @@ import {
 	quizInputObject,
 	quizInputProblems,
 } from "../core/question-core.ts";
+import {
+	CODE_EXERCISE_TOOL,
+	codeExerciseInputObject,
+	codeExerciseInputProblems,
+} from "../core/code-exercise.ts";
 import { filterEnabledTools, type EnabledTools } from "../core/pending.ts";
 import type { JobRecord } from "../core/contracts.ts";
 import type { JobStore } from "../core/ports.ts";
@@ -392,6 +397,65 @@ export function teachQuizToolFor(ctx: Pick<PlanToolContext, "chatId" | "chatStor
 	};
 }
 
+// ─── the code-exercise tool ───────────────────────────────────────────────────
+
+/** The canonical example call for `code-exercises` (mechanics only, like the
+ *  quiz example above): a graded exercise whose fields exercise the escaping
+ *  hazards — newlines inside the code strings. Serialized by
+ *  JSON.stringify so the escaping the model sees is by construction correct. */
+export const codeExerciseExampleBody = {
+	nodeId: "list-comprehension",
+	language: "python",
+	question: "Fill `squares` with the square of every number in `nums`, using one list comprehension.",
+	starterCode: "nums = [10, 20, 30]\nsquares = []\n",
+	explanation:
+		"A comprehension builds the whole list in one expression:\n```python\nsquares = [n * n for n in nums]\n```",
+	tests: "assert squares == [100, 400, 900]",
+};
+
+function codeExerciseDescription(): string {
+	return (
+		"Give the learner a CODING exercise: an editor pre-filled with `starterCode`, a Run button, and the output of " +
+		"his run. He must run his latest code before he can submit. Python code runs in the browser (standard library " +
+		"only — no NumPy or other packages; each run is time-limited). `tests` is optional: with " +
+		"tests, the run is graded — the checks execute AFTER his code in the same namespace and any error fails the " +
+		"run, and his result carries `passed`; without tests the exercise is run-only and you read his code and " +
+		"output yourself. The result returns his final code, how many times he ran it, and the last run's stdout / " +
+		"error. The `explanation` is revealed to him after he submits, whether or not he passed. " +
+		"Set `nodeId` (required) to the plan node this exercise is about — validated at call time against the " +
+		"session's plan map. " +
+		"ONE exercise per turn: call a single " +
+		CODE_EXERCISE_TOOL +
+		", then end your turn — his result determines the next." +
+		"\nExample arguments — copy the escaping exactly: inside JSON strings a newline is \\n and a LaTeX backslash is \\\\.\n```json\n" +
+		JSON.stringify(codeExerciseExampleBody, null, 2) +
+		"\n``` The example's nodeId is illustrative — copy an exact id from this session's plan_init."
+	);
+}
+
+/** The teacher's code-exercise tool (teach phase only — there is no probe
+ *  twin). Same seam as the teach quiz: the authoring contract + the
+ *  per-session plan-nodeId validation run in execute; the learner's run is
+ *  client-side, so the result is the placeholder. Not user-toggleable. */
+export function teachCodeExerciseToolFor(
+	ctx: Pick<PlanToolContext, "chatId" | "chatStore">,
+): AgentTool<typeof codeExerciseInputObject> {
+	return {
+		name: CODE_EXERCISE_TOOL,
+		label: CODE_EXERCISE_TOOL,
+		description: codeExerciseDescription(),
+		parameters: codeExerciseInputObject,
+		executionMode: "sequential",
+		execute: async (_toolCallId, input) => {
+			const problems = [...codeExerciseInputProblems(input)];
+			const nodeIdProblemText = nodeIdProblem(ctx, input.nodeId);
+			if (nodeIdProblemText) problems.push(nodeIdProblemText);
+			if (problems.length > 0) return invalidInputResult(CODE_EXERCISE_TOOL, problems);
+			return questionResult();
+		},
+	};
+}
+
 export interface TeacherToolContext extends PlanToolContext {
 	/** Job-tool wiring (sub-agent dispatch): the job store + the runner's
 	 *  spawn seam. The composition root injects both. */
@@ -452,6 +516,7 @@ export function createTeacherTools(
 		filterEnabledTools(
 			{
 			...quizzing,
+			[CODE_EXERCISE_TOOL]: teachCodeExerciseToolFor(ctx),
 			ask_user_question: askUserQuestionTool,
 			// The learner-filesystem set is always-on (user-decided 2026-09,
 			// sources v1): the teacher locates and reads learner-referenced

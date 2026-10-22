@@ -28,7 +28,7 @@ import {
 	type LhMessage,
 	type LhViewMessage,
 	type LiveExecution,
-	type QuestionAnswerData,
+	type AnswerData,
 } from "../src/core";
 
 export type SessionStatus = "ready" | "submitted" | "streaming" | "error";
@@ -649,7 +649,7 @@ export class SessionModel {
 
 	/** The answer path (the dock): the answer IS the question call's tool
 	 *  result (fork 1), riding as its input event. */
-	submitAnswer(tool: string, toolCallId: string, output: QuestionAnswerData): Promise<void> {
+	submitAnswer(tool: string, toolCallId: string, output: AnswerData): Promise<void> {
 		void tool;
 		return this.send({ type: "answer", toolCallId, answer: output });
 	}
@@ -660,7 +660,7 @@ export class SessionModel {
 	 * user's choice; the next plain send is the wake. On failure the
 	 * durable record wins: the error surfaces, the record-changed sync
 	 * (or any later refetch) replaces the optimistic append with truth. */
-	async dismissQuestion(toolCallId: string, answer: QuestionAnswerData): Promise<void> {
+	async dismissQuestion(toolCallId: string, answer: AnswerData): Promise<void> {
 		if (!this.readyRef) return;
 		const tool = pendingCallTool([...this.base, ...this.tail], toolCallId) ?? "quiz";
 		this.mutate(() => {
