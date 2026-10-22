@@ -1,13 +1,28 @@
 /**
- * Quote-a-selection (owner, 2026-10-21): while the "Thinking while reading"
- * field is open, selecting teaching prose offers a Quote button that appends
- * the selection to the field as a Markdown blockquote. The pure pieces live
- * here; the floating button is components/quote-selection.tsx.
+ * Quote-a-selection (owner, 2026-10-21; automatic 2026-10-22): while a
+ * question waits, selecting teaching prose appends it, as a Markdown
+ * blockquote, to the visible thinking field. The pure pieces live here; the
+ * selection listener is components/quote-selection.tsx.
  */
 import { selectionCopyText } from "./math-copy-dom";
 
 /** The teacher's prose passages in the transcript (components/chat.tsx). */
 const PASSAGE = ".lh-source-passage";
+
+/** A selection shorter than this is left alone: a double-clicked word or a
+ *  stray click-drag is not a quote. */
+export const MIN_AUTO_QUOTE_CHARS = 4;
+
+/** Window event the dock's "Your thinking" field listens for (detail: the
+ *  selected text) — the chat page and the dock are siblings, not parent and
+ *  child, so the quote travels by event rather than prop. */
+export const QUOTE_EVENT = "lh:quote-selection";
+
+/** Is this selected text long enough to quote on its own? Counts characters,
+ *  not UTF-16 units, so CJK text and emoji weigh one each. */
+export function isAutoQuotable(text: string): boolean {
+	return [...text.trim()].length >= MIN_AUTO_QUOTE_CHARS;
+}
 
 /** A quote longer than this is cut and marked with an ellipsis. */
 export const MAX_QUOTE_CHARS = 500;

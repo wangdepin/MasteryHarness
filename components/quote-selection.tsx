@@ -1,86 +1,43 @@
 "use client";
 
 /**
- * The floating Quote button (owner, 2026-10-21): selecting the teacher's
- * prose pops a small button beside the selection; clicking it hands the
- * selected text to `onQuote`. Mounted only while the "Thinking while
- * reading" field is. Renders nothing until there is a selection to quote.
+ * Automatic quoting (owner, 2026-10-22): releasing the mouse on a selection of
+ * the teacher's prose hands the selected text straight to `onQuote` — no
+ * button to click. The selection is left in place, so Cmd+C still copies it.
+ * Selections under MIN_AUTO_QUOTE_CHARS are ignored, and the same selection is
+ * never quoted twice. Mounted only while a question waits. Renders nothing.
  */
 
-import { useEffect, useState } from "react";
-import { createPortal } from "react-dom";
-import { QuoteIcon } from "lucide-react";
-import { selectedPassageText } from "./quote-selection-dom";
-
-interface Offer {
-	text: string;
-	x: number;
-	y: number;
-}
-
-const BUTTON_W = 76;
-const BUTTON_H = 28;
-const GAP = 6;
-/** The page's top bar (h-15 = 60px + border) — the button never sits under it. */
-const TOP_BAR = 76;
-
-function offerFor(selection: Selection): Offer | null {
-	const text = selectedPassageText(selection);
-	if (text === null) return null;
-	const rect = selection.getRangeAt(selection.rangeCount - 1).getBoundingClientRect();
-	const x = Math.min(Math.max(rect.right - BUTTON_W, 8), window.innerWidth - BUTTON_W - 8);
-	// Above the selection; below it when that would run under the top bar.
-	const y = rect.top - BUTTON_H - GAP >= TOP_BAR ? rect.top - BUTTON_H - GAP : rect.bottom + GAP;
-	return { text, x, y };
-}
+import { useEffect, useRef } from "react";
+import { isAutoQuotable, selectedPassageText } from "./quote-selection-dom";
 
 export function QuoteSelection({ onQuote }: { onQuote: (text: string) => void }) {
-	const [offer, setOffer] = useState<Offer | null>(null);
+	// The handler is read through a ref so the listeners are attached once.
+	const quoteRef = useRef(onQuote);
+	quoteRef.current = onQuote;
+	// The text already quoted from the current selection; cleared when it collapses.
+	const quoted = useRef<string | null>(null);
 
 	useEffect(() => {
-		const refresh = () => {
+		// Quote after the gesture ends (not on every drag step).
+		const onMouseUp = () => {
 			const selection = window.getSelection();
-			setOffer(selection ? offerFor(selection) : null);
+			const text = selection ? selectedPassageText(selection) : null;
+			if (text === null || !isAutoQuotable(text) || text === quoted.current) return;
+			quoted.current = text;
+			quoteRef.current(text);
 		};
-		// Offer after the gesture ends (not on every drag step); drop it the
-		// moment the selection collapses or the page scrolls out from under it.
 		const onSelectionChange = () => {
 			const selection = window.getSelection();
-			if (!selection || selection.isCollapsed) setOffer(null);
+			if (!selection || selection.isCollapsed) quoted.current = null;
 		};
-		document.addEventListener("mouseup", refresh);
-		document.addEventListener("keyup", refresh);
+		document.addEventListener("mouseup", onMouseUp);
 		document.addEventListener("selectionchange", onSelectionChange);
-		const onScroll = () => setOffer(null);
-		document.addEventListener("scroll", onScroll, true);
 		return () => {
-			document.removeEventListener("mouseup", refresh);
-			document.removeEventListener("keyup", refresh);
+			document.removeEventListener("mouseup", onMouseUp);
 			document.removeEventListener("selectionchange", onSelectionChange);
-			document.removeEventListener("scroll", onScroll, true);
 		};
 	}, []);
 
-	if (offer === null) return null;
-	// Portaled to <body>: the dock and header are their own stacking contexts,
-	// and a fixed child of the dock would paint under the top bar.
-	return createPortal(
-		<button
-			type="button"
-			data-testid="quote-selection"
-			// Keep the selection (and focus) alive through the press.
-			onMouseDown={(e) => e.preventDefault()}
-			onClick={() => {
-				onQuote(offer.text);
-				window.getSelection()?.removeAllRanges();
-				setOffer(null);
-			}}
-			style={{ position: "fixed", left: offer.x, top: offer.y, width: BUTTON_W, height: BUTTON_H }}
-			className="z-[100] flex items-center justify-center gap-1 rounded-lg border bg-card text-xs text-foreground shadow-lg transition-colors hover:bg-accent"
-		>
-			<QuoteIcon className="size-3" />
-			Quote
-		</button>,
-		document.body,
-	);
+	return null;
 }

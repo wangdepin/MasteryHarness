@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { appendQuote, MAX_QUOTE_CHARS } from "../components/quote-selection-dom.ts";
+import { appendQuote, isAutoQuotable, MAX_QUOTE_CHARS, MIN_AUTO_QUOTE_CHARS } from "../components/quote-selection-dom.ts";
 
 describe("appendQuote — selected prose into the reading-thinking field", () => {
 	it("an empty field becomes the blockquote plus a blank line to type under", () => {
@@ -31,5 +31,19 @@ describe("appendQuote — selected prose into the reading-thinking field", () =>
 
 	it("trims surrounding whitespace of the selection", () => {
 		assert.equal(appendQuote("", "  hi \n"), "> hi\n\n");
+	});
+});
+
+describe("isAutoQuotable — what quotes itself on mouse-up", () => {
+	it("ignores a double-clicked word or a few characters", () => {
+		assert.equal(isAutoQuotable("RMS"), false);
+		assert.equal(isAutoQuotable("  向量  "), false);
+	});
+
+	it("quotes from the minimum length up, counting characters not UTF-16 units", () => {
+		assert.equal(isAutoQuotable("均方根大小"), true);
+		assert.equal(isAutoQuotable("😀😀😀😀"), true);
+		assert.equal(isAutoQuotable("😀😀😀"), false);
+		assert.equal(MIN_AUTO_QUOTE_CHARS, 4);
 	});
 });

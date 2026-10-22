@@ -78,7 +78,7 @@ import {
 } from "@/src/core";
 import { ReadingThinkingField } from "@/components/reading-thinking";
 import { QuoteSelection } from "@/components/quote-selection";
-import { appendQuote } from "@/components/quote-selection-dom";
+import { appendQuote, QUOTE_EVENT } from "@/components/quote-selection-dom";
 import { SentenceReader, SentenceReaderButton } from "@/components/sentence-reader";
 import { currentUserThinkingOpen, setAllUserThinkingOpen } from "@/components/thinking-block";
 import { slotsConfigured, type ModelsSettings } from "@/src/core";
@@ -2275,16 +2275,14 @@ function DockOverlay({
 					    teach-phase check waits — the same cue that collapses it. It
 					    claims dictated speech until the learner reveals the check
 					    (the dock reclaims then). Rides the check answer on submit. */}
-					{pending && requiresReveal && (
+					{/* Selecting teaching prose quotes it into the thinking field in
+					    view: the reading field while a teach check waits, else the
+					    dock's own "Your thinking" field (it listens for QUOTE_EVENT). */}
+					{pending && (
 						<QuoteSelection
 							onQuote={(text) => {
-								onReadingThinking(appendQuote(readingThinking, text));
-								// Land the caret after the quote once the field has re-rendered.
-								requestAnimationFrame(() => {
-									const field = document.querySelector<HTMLTextAreaElement>('[data-testid="reading-thinking-field"] textarea');
-									field?.focus();
-									field?.setSelectionRange(field.value.length, field.value.length);
-								});
+								if (requiresReveal) onReadingThinking(appendQuote(readingThinking, text));
+								else window.dispatchEvent(new CustomEvent(QUOTE_EVENT, { detail: text }));
 							}}
 						/>
 					)}

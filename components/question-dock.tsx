@@ -36,6 +36,7 @@ import {
 	restoreLiteralNewlines,
 } from "@/src/core";
 import { CONFIDENCE_COLORS, confidenceRailStyle } from "@/components/confidence-rail";
+import { appendQuote, QUOTE_EVENT } from "@/components/quote-selection-dom";
 
 /**
  * The question dock — a pending quiz/ask REPLACES the chat composer: the
@@ -363,6 +364,21 @@ function QuestionDockForm({
 		// the reading-thinking field owns dictated speech during the reading.
 		dictationClaim,
 	);
+
+	// Selected teaching prose arrives as a blockquote in "Your thinking" (select
+	// modes only — text mode has no thinking field to quote into).
+	useEffect(() => {
+		if (qd.mode === "text") return;
+		const onQuote = (e: Event) => {
+			const quote = (e as CustomEvent<unknown>).detail;
+			if (typeof quote !== "string") return;
+			const v = appendQuote(thinkingTextRef.current, quote);
+			thinkingTextRef.current = v;
+			setThinking(v);
+		};
+		window.addEventListener(QUOTE_EVENT, onQuote);
+		return () => window.removeEventListener(QUOTE_EVENT, onQuote);
+	}, [qd.mode]);
 
 	const toggle = (idx: number) => setSel(toggleOption(selectMode, sel, idx));
 
