@@ -4,6 +4,7 @@
 
 <p>
   <a href="#whats-different-in-this-fork">What's different</a> ·
+  <a href="#review">Review</a> ·
   <a href="#how-it-works">How it works</a> ·
   <a href="#install">Install</a> ·
   <a href="https://github.com/wangdepin/MasteryHarness/issues">Issues</a>
@@ -17,6 +18,8 @@ MasteryHarness uses AI agents to plan and teach lessons from your current unders
 
 ## What's different in this fork
 
+- **Review: spaced repetition for what you have learned.** A Review page in the sidebar lists the propositions whose recall is due, scheduled by FSRS-6 from your practice results. Pick some, start a review, and the next practice session is built around them. [Details below](#review).
+- **Code exercises.** The teacher can pose a Python exercise in the dock: you write code, run it in the app (a bundled Pyodide runtime, no network needed), and submit only after running the current code. A "Your thinking" field carries your reasoning to the teacher.
 - **Subscription sign-in.** Use your ChatGPT, Claude, or Google Antigravity (Gemini, Claude, GPT-OSS) subscription instead of an API key. Antigravity models appear in the picker once you are signed in.
 - **Sentence reader.** Read teaching text sentence by sentence, with optional read-aloud through ElevenLabs.
 - **Quote while you read.** Selecting teaching prose quotes it into "Thinking while reading" automatically, including in prediction questions.
@@ -27,6 +30,19 @@ MasteryHarness uses AI agents to plan and teach lessons from your current unders
 
 Everything else behaves as in upstream. See the [commit history](https://github.com/wangdepin/MasteryHarness/commits/main) for the exact changes.
 
+## Review
+
+Learning that is not revisited fades. Review brings each proposition back when you are about to forget it, using the practice sessions you have already done.
+
+- **Where it lives.** The **Review** row in the sidebar, under Practice, with a count of what is due now. The page lists due propositions, most overdue first, and what comes up later.
+- **Run a review.** The most overdue propositions (up to 8) are pre-selected; tick or untick to change the set, then **Start review**. That opens an ordinary practice session on exactly those propositions. How it goes becomes the next schedule.
+- **How it is scheduled.** [FSRS-6](https://github.com/open-spaced-repetition/ts-fsrs) with its default weights and a 90% target recall. A solve with no hint pushes a proposition far out; a failure brings it back soon.
+- **Nothing extra to maintain.** The schedule is recomputed from your practice sessions each time you open the page. No review queue is stored, so deleting a practice session also removes its evidence.
+- **Slips are not forgetting.** The teacher labels each miss. If you knew the idea and made a careless or mechanical slip, the proposition still counts as recalled.
+- **One failure is not a verdict.** If you fail a proposition you knew well, the schedule is left untouched and the row is marked **re-check**; it returns the next day. Anything after the failure in the same session is ignored, because you had just seen the answer. A later session decides: failing again counts as forgetting, a success counts, capped at "hard".
+
+Design notes: [docs/review-plan.md](docs/review-plan.md).
+
 ## How it works
 
 This is upstream's design, summarized.
@@ -35,6 +51,7 @@ This is upstream's design, summarized.
 2. **Plan.** It works out a dependency map from that starting point to your goal, and adapts when your understanding turns out different.
 3. **Teach.** Each step builds on something you already understand: you predict, get an explanation, and check your understanding.
 4. **Practice.** Separate sessions pose varied problems that require the right knowledge to come to mind without being named first.
+5. **Review.** (This fork.) Propositions you have practiced come back on a schedule, before you forget them.
 
 What you are taught accumulates in a knowledge graph of propositions and reasoning chains, with links back to the source sessions. Future teaching and practice sessions read from it instead of starting from scratch.
 
