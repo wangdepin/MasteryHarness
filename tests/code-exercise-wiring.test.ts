@@ -132,6 +132,14 @@ describe("the result the model reads", () => {
 		lastRun: { stdout: "hi\n", passed: true, timedOut: false, durationMs: 4 },
 	});
 
+	it("his thinking reaches the model only when non-blank, trimmed", () => {
+		const withThinking = buildCodeAnswer(exercise, { code: "x", runs: 1, thinking: "  loop felt clumsy  " });
+		assert.equal(compactAnswer(withThinking).thinking, "loop felt clumsy");
+		const blank = buildCodeAnswer(exercise, { code: "x", runs: 1, thinking: " \n " });
+		assert.equal("thinking" in compactAnswer(blank), false);
+		assert.equal("thinking" in blank, false);
+	});
+
 	it("compactAnswer routes a code answer to its own compact form", () => {
 		assert.deepEqual(compactAnswer(passing), { kind: "code-exercise", code: "squares = [1]", runs: 2, passed: true, stdout: "hi\n" });
 	});
@@ -170,6 +178,8 @@ describe("session export", () => {
 		assert.match(md(answer({ ...ran, error: "Timed out", timedOut: true }, false)), /timed out/);
 		assert.match(md(answer({ ...ran }, false)), /ran their code/);
 		assert.match(md(dismissedCodeAnswer(exercise)), /skipped this exercise/);
+		const thought = buildCodeAnswer(exercise, { code: "x", runs: 1, thinking: "used a loop first", lastRun: { ...ran, passed: true } });
+		assert.match(md(thought), /\*\(his thinking: used a loop first\)\*/);
 		assert.match(md(answer({ ...ran, passed: true })), /\*\*Q:\*\* Square every number\./);
 	});
 });

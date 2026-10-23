@@ -118,7 +118,7 @@ function toolResultBody(result: ToolResultMessage, ctx?: MarkdownContext): { hea
 
 	if (result.toolName === CODE_EXERCISE_TOOL) {
 		const code = result.details as
-			| Partial<{ questionText: string; graded: boolean; runs: number; dismissed: boolean; lastRun: { passed?: boolean; error?: string; timedOut?: boolean } }>
+			| Partial<{ questionText: string; thinking: string; graded: boolean; runs: number; dismissed: boolean; lastRun: { passed?: boolean; error?: string; timedOut?: boolean } }>
 			| undefined;
 		const question = typeof code?.questionText === "string" && code.questionText ? code.questionText : "(no question text)";
 		const body = [`**Q:** ${question}`];
@@ -128,6 +128,7 @@ function toolResultBody(result: ToolResultMessage, ctx?: MarkdownContext): { hea
 		else if (code?.lastRun?.timedOut === true) body.push("The learner's code timed out.");
 		else if (typeof code?.lastRun?.error === "string") body.push("The learner's code raised an error.");
 		else body.push("The learner ran their code.");
+		if (typeof code?.thinking === "string" && code.thinking) body.push(`*(his thinking: ${code.thinking})*`);
 		return { heading: "Code exercise", body };
 	}
 

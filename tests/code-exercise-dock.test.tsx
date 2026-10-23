@@ -46,6 +46,13 @@ describe("CodeExerciseDock first paint", () => {
 		assert.match(html, /Run your code to see its output here/);
 	});
 
+	it("offers a Your thinking field beside Submit", () => {
+		const html = render();
+		assert.match(html, /data-testid="thinking-field"/);
+		assert.match(html, /YOUR THINKING/);
+		assert.match(html, /<textarea[^>]*data-testid="code-thinking"/);
+	});
+
 	it("never renders the tests or the explanation", () => {
 		const html = render();
 		assert.doesNotMatch(html, /assert squares/);

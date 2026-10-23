@@ -1,10 +1,12 @@
 "use client";
 
-import { useLayoutEffect, useReducer, useRef, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useReducer, useRef, useState, type KeyboardEvent } from "react";
 import { CheckIcon, PlayIcon, XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MessageResponse } from "@/components/ai-elements/message";
 import { BrailleSpinner } from "@/components/braille-spinner";
+import { finishDictation, isDictationActive, joinDictation, useDictationTarget } from "@/components/dictation";
+import { appendQuote, QUOTE_EVENT } from "@/components/quote-selection-dom";
 import { cn } from "@/lib/utils";
 import {
 	buildCodeAnswer,
@@ -47,10 +49,34 @@ export interface CodeExerciseDockProps {
 	 *  the server's gate, so Submit is disabled and says so (the question
 	 *  dock's affordance). */
 	compactionRunning?: boolean;
+	/** Esc in the thinking field ends dictation (the DockOverlay's cancel). */
+	onEscape?: () => void;
 }
 
-export function CodeExerciseDock({ input, runtime, onSubmit, compactionRunning = false }: CodeExerciseDockProps) {
+export function CodeExerciseDock({ input, runtime, onSubmit, compactionRunning = false, onEscape }: CodeExerciseDockProps) {
 	const [state, dispatch] = useReducer(exerciseReducer, input.starterCode, initialExerciseState);
+	// "Your thinking" — the learner's transfer channel, as in the question dock.
+	// The ref MIRRORS the state: a dictation flush lands via setState after an
+	// await, so submit reads the ref (the question dock's "nothing gets lost" law).
+	const [thinking, setThinking] = useState("");
+	const thinkingRef = useRef("");
+	const writeThinking = useCallback((value: string) => {
+		thinkingRef.current = value;
+		setThinking(value);
+	}, []);
+	useDictationTarget(
+		useCallback((text: string) => writeThinking(joinDictation(thinkingRef.current, text)), [writeThinking]),
+		true,
+	);
+	// Selected teaching prose arrives as a blockquote in "Your thinking".
+	useEffect(() => {
+		const onQuote = (event: Event): void => {
+			const quote = (event as CustomEvent<unknown>).detail;
+			if (typeof quote === "string") writeThinking(appendQuote(thinkingRef.current, quote));
+		};
+		window.addEventListener(QUOTE_EVENT, onQuote);
+		return () => window.removeEventListener(QUOTE_EVENT, onQuote);
+	}, [writeThinking]);
 	const graded = input.tests !== undefined;
 	const submittable = canSubmit(state) && !compactionRunning;
 	const editorRef = useRef<HTMLTextAreaElement>(null);
@@ -75,9 +101,14 @@ export function CodeExerciseDock({ input, runtime, onSubmit, compactionRunning =
 		}
 	};
 
+	const doSubmit = (): void => {
+		onSubmit(buildCodeAnswer(input, { ...toSubmission(state), thinking: thinkingRef.current }));
+	};
 	const submit = (): void => {
 		if (!submittable) return;
-		onSubmit(buildCodeAnswer(input, toSubmission(state)));
+		// Finish dictation first so the last spoken words reach the answer.
+		if (!isDictationActive()) doSubmit();
+		else void finishDictation().then(doSubmit);
 	};
 
 	// Tab indents instead of leaving the editor; Shift+Tab keeps its native focus move.
@@ -145,18 +176,43 @@ export function CodeExerciseDock({ input, runtime, onSubmit, compactionRunning =
 					submit();
 				}}
 			>
-				<div className="flex items-center justify-between gap-2 p-1">
-					<span data-testid="code-submit-hint" className="pl-1.5 text-xs text-muted-foreground">
-						{compactionRunning ? "compacting session…" : submitHint(state)}
-					</span>
-					<Button
-						type="submit"
-						data-testid="code-submit"
-						disabled={!submittable}
-						className="ml-auto h-9 rounded-[6px] px-3.5 text-sm font-medium"
-					>
-						Submit answer
-					</Button>
+				<div
+					data-testid="thinking-field"
+					className="rounded-[10px] border border-border/70 bg-background/60 transition-colors focus-within:border-primary/50"
+				>
+					<div className="px-2.5 pt-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+						YOUR THINKING
+					</div>
+					<textarea
+						data-testid="code-thinking"
+						aria-label="Your thinking"
+						value={thinking}
+						onChange={(event) => writeThinking(event.target.value)}
+						onKeyDown={(event) => {
+							// Esc ends dictation; stopPropagation keeps the window chain
+							// from also aborting a turn (same claim as the question dock).
+							if (event.key !== "Escape" || !onEscape) return;
+							event.preventDefault();
+							event.stopPropagation();
+							onEscape();
+						}}
+						placeholder="Why this approach? Whatever comes to mind."
+						rows={1}
+						className="field-sizing-content lh-input max-h-48 min-h-[4.5rem] w-full resize-none bg-transparent px-2.5 py-2 outline-none placeholder:text-muted-foreground/70"
+					/>
+					<div className="flex items-center justify-between gap-2 p-1">
+						<span data-testid="code-submit-hint" className="pl-1.5 text-xs text-muted-foreground">
+							{compactionRunning ? "compacting session…" : submitHint(state)}
+						</span>
+						<Button
+							type="submit"
+							data-testid="code-submit"
+							disabled={!submittable}
+							className="ml-auto h-9 rounded-[6px] px-3.5 text-sm font-medium"
+						>
+							Submit answer
+						</Button>
+					</div>
 				</div>
 			</form>
 		</div>

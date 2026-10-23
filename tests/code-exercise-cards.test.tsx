@@ -77,6 +77,16 @@ describe("CodeExerciseAnsweredCard", () => {
 		assert.doesNotMatch(html, /Checks (passed|failed)/);
 	});
 
+	it("shows his thinking when he wrote it, and nothing when he did not", () => {
+		const answered = (thinking?: string) =>
+			renderToStaticMarkup(
+				<CodeExerciseAnsweredCard answer={buildCodeAnswer({ ...input, language: "python" }, { code: "x", runs: 1, thinking })} />,
+			);
+		assert.match(answered("a loop felt clumsy"), /data-testid="your-thinking"/);
+		assert.match(answered("a loop felt clumsy"), /YOUR THINKING/, "the in-card row arrives collapsed, like the quiz's");
+		assert.doesNotMatch(answered(), /your-thinking/);
+	});
+
 	it("tucks the explanation behind Why", () => {
 		const html = card({ ...ran, passed: true });
 		assert.match(html, /data-testid="tucked-explanation"/);

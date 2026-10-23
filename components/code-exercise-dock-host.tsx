@@ -17,12 +17,14 @@ export function CodeExerciseDockHost({
 	onExpand,
 	onSubmit,
 	compactionRunning = false,
+	onEscape,
 }: {
 	input: unknown;
 	expanded: boolean;
 	onExpand: () => void;
 	onSubmit: (answer: CodeExerciseAnswerData) => void;
 	compactionRunning?: boolean;
+	onEscape?: () => void;
 }) {
 	// Parse, don't cast (src/core/tool-parts.ts): the dock mounts on
 	// validated input-available parts, so this is defense in depth.
@@ -43,6 +45,7 @@ export function CodeExerciseDockHost({
 					runtime={codeRuntimeFor(exercise.language)}
 					onSubmit={onSubmit}
 					compactionRunning={compactionRunning}
+					onEscape={onEscape}
 				/>
 			</div>
 		</>

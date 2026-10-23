@@ -420,8 +420,8 @@ function codeExerciseDescription(): string {
 		"only — no NumPy or other packages; each run is time-limited). `tests` is optional: with " +
 		"tests, the run is graded — the checks execute AFTER his code in the same namespace and any error fails the " +
 		"run, and his result carries `passed`; without tests the exercise is run-only and you read his code and " +
-		"output yourself. The result returns his final code, how many times he ran it, and the last run's stdout / " +
-		"error. The `explanation` is revealed to him after he submits, whether or not he passed. " +
+		"output yourself. The result returns his final code, how many times he ran it, the last run's stdout / " +
+		"error, and his own thinking about his approach when he wrote any. The `explanation` is revealed to him after he submits, whether or not he passed. " +
 		"Set `nodeId` (required) to the plan node this exercise is about — validated at call time against the " +
 		"session's plan map. " +
 		"ONE exercise per turn: call a single " +

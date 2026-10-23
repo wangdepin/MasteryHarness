@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { CheckIcon, XIcon } from "lucide-react";
 import { MessageResponse } from "@/components/ai-elements/message";
+import { ThinkingBlock } from "@/components/thinking-block";
 import { cn } from "@/lib/utils";
 import { restoreLiteralNewlines, type CodeExerciseAnswerData } from "@/src/core";
 
@@ -47,6 +48,9 @@ export function CodeExerciseAnsweredCard({ answer }: { answer: CodeExerciseAnswe
 				<pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-destructive/40 p-3 font-mono text-sm text-destructive">
 					{lastRun.error}
 				</pre>
+			)}
+			{answer.thinking && (
+				<ThinkingBlock testId="your-thinking" label="YOUR THINKING" text={answer.thinking} inCard />
 			)}
 			{answer.explanation && (
 				<div className="mt-2" data-testid="tucked-explanation">

@@ -134,6 +134,8 @@ export interface CodeSubmission {
 	code: string;
 	runs: number;
 	lastRun?: CodeRunResult;
+	/** The learner's own reasoning ("Your thinking"); blank = none. */
+	thinking?: string;
 }
 
 /** The learner's answer record — the full structured form, for the record
@@ -149,6 +151,8 @@ export interface CodeExerciseAnswerData {
 	lastRun?: Pick<CodeRunResult, "stdout" | "error" | "passed" | "timedOut">;
 	/** Snapshot for the answered card. */
 	explanation?: string;
+	/** The learner's reasoning about his approach, when he wrote any. */
+	thinking?: string;
 	dismissed?: boolean;
 	answeredAt: string;
 }
@@ -165,6 +169,7 @@ export function buildCodeAnswer(
 	submission: CodeSubmission,
 ): CodeExerciseAnswerData {
 	const { lastRun } = submission;
+	const thinking = submission.thinking?.trim();
 	return {
 		kind: "code-exercise",
 		language: exercise.language,
@@ -183,6 +188,7 @@ export function buildCodeAnswer(
 				}
 			: {}),
 		explanation: exercise.explanation,
+		...(thinking ? { thinking } : {}),
 		answeredAt: new Date().toISOString(),
 	};
 }
@@ -204,14 +210,15 @@ export function dismissedCodeAnswer(
 	};
 }
 
-/** The MODEL-VISIBLE answer: only what the learner added — his final code
- *  and what running it did. The call already carries everything the model
+/** The MODEL-VISIBLE answer: only what the learner added — his final code,
+ *  what running it did, and his own thinking when he wrote it. The call already carries everything the model
  *  authored. A graded exercise always reports `passed` (never run = not
  *  passed); a run-only one never does. */
 export function compactCodeAnswerForModel(ad: CodeExerciseAnswerData): Record<string, unknown> {
 	if (ad.dismissed) return { kind: ad.kind, dismissed: true };
 	const out: Record<string, unknown> = { kind: ad.kind, code: ad.code, runs: ad.runs };
 	if (ad.graded) out.passed = ad.lastRun?.passed === true;
+	if (ad.thinking) out.thinking = ad.thinking;
 	if (!ad.lastRun) return out;
 	if (ad.lastRun.stdout) out.stdout = ad.lastRun.stdout;
 	if (ad.lastRun.error) out.error = ad.lastRun.error;

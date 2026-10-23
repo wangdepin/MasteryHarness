@@ -2339,6 +2339,7 @@ function DockOverlay({
 									expanded={expanded}
 									onExpand={expandAndReveal}
 									onSubmit={onSubmitAnswer}
+									onEscape={dictationCancel}
 									compactionRunning={compactionRunning}
 								/>
 							) : pending ? (
