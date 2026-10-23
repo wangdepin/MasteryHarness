@@ -11,6 +11,7 @@ import {
 	exerciseReducer,
 	initialExerciseState,
 	insertIndent,
+	isRunShortcut,
 	lastRunIsCurrent,
 	toSubmission,
 	type ExerciseAction,
@@ -134,5 +135,22 @@ describe("insertIndent", () => {
 	it("works at the ends", () => {
 		assert.equal(insertIndent("", 0, 0).value, EDITOR_INDENT);
 		assert.equal(insertIndent("x", 1, 1).value, `x${EDITOR_INDENT}`);
+	});
+});
+
+describe("isRunShortcut", () => {
+	const key = (over: Partial<Parameters<typeof isRunShortcut>[0]>) =>
+		isRunShortcut({ key: "Enter", metaKey: false, ctrlKey: false, shiftKey: false, altKey: false, ...over });
+
+	it("is ⌘+Enter or Ctrl+Enter", () => {
+		assert.equal(key({ metaKey: true }), true);
+		assert.equal(key({ ctrlKey: true }), true);
+	});
+
+	it("leaves plain Enter, Shift/Alt chords and other keys alone", () => {
+		assert.equal(key({}), false);
+		assert.equal(key({ metaKey: true, shiftKey: true }), false);
+		assert.equal(key({ ctrlKey: true, altKey: true }), false);
+		assert.equal(key({ metaKey: true, key: "a" }), false);
 	});
 });

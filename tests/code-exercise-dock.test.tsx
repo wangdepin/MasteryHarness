@@ -53,6 +53,10 @@ describe("CodeExerciseDock first paint", () => {
 		assert.match(html, /<textarea[^>]*data-testid="code-thinking"/);
 	});
 
+	it("hints the editor's run chord", () => {
+		assert.match(render(), /data-testid="code-run-hint"[^>]*>\s*⌘↵ runs/);
+	});
+
 	it("never renders the tests or the explanation", () => {
 		const html = render();
 		assert.doesNotMatch(html, /assert squares/);

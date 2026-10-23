@@ -97,3 +97,10 @@ export function insertIndent(
 	const after = value.slice(selectionEnd);
 	return { value: `${before}${EDITOR_INDENT}${after}`, caret: selectionStart + EDITOR_INDENT.length };
 }
+
+/** ⌘/Ctrl+Enter in the editor runs the code (the notebook convention). Plain
+ *  Enter stays a newline; Submit is never a keystroke here — it needs the
+ *  button, after a run. */
+export function isRunShortcut(event: { key: string; metaKey: boolean; ctrlKey: boolean; shiftKey: boolean; altKey: boolean }): boolean {
+	return event.key === "Enter" && (event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey;
+}

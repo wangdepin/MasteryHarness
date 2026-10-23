@@ -16,6 +16,7 @@ import {
 	exerciseReducer,
 	initialExerciseState,
 	insertIndent,
+	isRunShortcut,
 	lastRunIsCurrent,
 	restoreLiteralNewlines,
 	toSubmission,
@@ -111,8 +112,13 @@ export function CodeExerciseDock({ input, runtime, onSubmit, compactionRunning =
 		else void finishDictation().then(doSubmit);
 	};
 
-	// Tab indents instead of leaving the editor; Shift+Tab keeps its native focus move.
+	// ⌘/Ctrl+Enter runs; Tab indents instead of leaving the editor (Shift+Tab keeps its native focus move).
 	const onEditorKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): void => {
+		if (isRunShortcut(event)) {
+			event.preventDefault();
+			void run();
+			return;
+		}
 		if (event.key !== "Tab" || event.shiftKey || event.altKey || event.metaKey || event.ctrlKey) return;
 		event.preventDefault();
 		const editor = event.currentTarget;
@@ -164,6 +170,9 @@ export function CodeExerciseDock({ input, runtime, onSubmit, compactionRunning =
 						Run
 					</Button>
 					<RunStatus state={state} graded={graded} />
+					<span data-testid="code-run-hint" className="ml-auto text-xs text-muted-foreground">
+						⌘↵ runs
+					</span>
 				</div>
 
 				<RunOutput state={state} />
@@ -189,6 +198,13 @@ export function CodeExerciseDock({ input, runtime, onSubmit, compactionRunning =
 						value={thinking}
 						onChange={(event) => writeThinking(event.target.value)}
 						onKeyDown={(event) => {
+							// ⌘/Ctrl+Enter submits, Enter is a newline (the question dock's
+							// rule, owner 2026-10-21); a closed Submit ignores the chord.
+							if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+								event.preventDefault();
+								submit();
+								return;
+							}
 							// Esc ends dictation; stopPropagation keeps the window chain
 							// from also aborting a turn (same claim as the question dock).
 							if (event.key !== "Escape" || !onEscape) return;
@@ -219,12 +235,12 @@ export function CodeExerciseDock({ input, runtime, onSubmit, compactionRunning =
 	);
 }
 
-/** Why Submit is closed, in the learner's terms (empty when it is open). */
+/** Why Submit is closed, in the learner's terms (when open, the thinking field's keys). */
 function submitHint(state: ExerciseState): string {
 	if (state.running) return "running…";
 	if (state.lastRun === null) return "run your code to submit";
 	if (!lastRunIsCurrent(state)) return "run your latest code to submit";
-	return "";
+	return "⌘↵ submits · ↵ newline";
 }
 
 /** The one-line verdict beside Run: checks, timeout, or staleness. */
