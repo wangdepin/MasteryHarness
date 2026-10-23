@@ -14,13 +14,15 @@
 
 MasteryHarness uses AI agents to plan and teach lessons from your current understanding to your goal. It builds a detailed picture of what you understand and how you reason, and updates it as you learn. Teaching builds understanding one reasoning step at a time, practice makes it usable, and a persistent knowledge graph carries it across sessions.
 
+**Bring your own model access, two ways.** Paste an API key for any of many providers (OpenAI, Anthropic, Google Gemini, DeepSeek, OpenRouter, and more), or skip the key and **sign in with an existing ChatGPT, Claude, or Google (Gemini) subscription**. Nothing goes through a MasteryHarness server; the app talks to your provider directly.
+
 ![Teaching session](docs/assets/teaching-session.png)
 
 ## What's different in this fork
 
 - **Review: spaced repetition for what you have learned.** A Review page in the sidebar lists the propositions whose recall is due, scheduled by FSRS-6 from your practice results. Pick some, start a review, and the next practice session is built around them. [Details below](#review).
 - **Code exercises.** The teacher can pose a Python exercise in the dock: you write code, run it in the app (a bundled Pyodide runtime, no network needed), and submit only after running the current code. A "Your thinking" field carries your reasoning to the teacher.
-- **Subscription sign-in.** Use your ChatGPT, Claude, or Google Antigravity (Gemini, Claude, GPT-OSS) subscription instead of an API key. Antigravity models appear in the picker once you are signed in.
+- **Sign in with ChatGPT or Google instead of an API key.** Use your ChatGPT, Claude, or Google subscription. Google sign-in goes through Antigravity, which offers Gemini, Claude, and GPT-OSS models; its models appear in the picker once you are signed in.
 - **Sentence reader.** Read teaching text sentence by sentence, with optional read-aloud through ElevenLabs.
 - **Quote while you read.** Selecting teaching prose quotes it into "Thinking while reading" automatically, including in prediction questions.
 - **Light theme.** A light theme and a System mode in appearance settings. The plan map follows the theme.
@@ -61,7 +63,15 @@ The screenshots are from upstream's interface.
 
 ## Install
 
-**Prebuilt installers:** see [Releases](https://github.com/wangdepin/MasteryHarness/releases). The macOS build is **unsigned**, so the first launch is blocked by Gatekeeper: open **System Settings → Privacy & Security → Open Anyway**, or run `xattr -dr com.apple.quarantine /Applications/MasteryHarness.app`. Unsigned builds do not update in-app; download the new version instead.
+**Prebuilt installers:** see [Releases](https://github.com/wangdepin/MasteryHarness/releases). The macOS build is **unsigned** (there is no paid Apple developer certificate behind it), so macOS blocks the first launch. Unsigned builds do not update in-app; download the new version instead.
+
+**macOS: "MasteryHarness is damaged and can't be opened"?** The app is not damaged. macOS shows this for any unsigned app downloaded from the internet. Drag MasteryHarness from the DMG into Applications, then clear the download quarantine flag in Terminal:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/MasteryHarness.app
+```
+
+Then open the app again. Alternatively, open **System Settings → Privacy & Security** and click **Open Anyway** after the first blocked launch. If the DMG itself will not open, run the same command on the downloaded file first, for example `xattr -dr com.apple.quarantine ~/Downloads/MasteryHarness-0.4.0-arm64.dmg`.
 
 Or build from source:
 
@@ -79,7 +89,7 @@ Want the official app? Download LearnHarness from [learnharness.ai](https://lear
 
 ## Your keys, your data
 
-- **Your keys and models.** No subscription or markup. You pay your providers for usage, or sign in with an existing subscription.
+- **Your keys and models.** No subscription or markup. Add an API key and pay your provider for usage, or sign in with an existing ChatGPT, Claude, or Google subscription. Both are set up in Settings.
 - **Local storage.** Your chats, graph, settings, and credentials live on your machine. Learning records are plain files you can inspect.
 - **External services.** Models run through your configured providers. Model requests send the context needed for the task; web research, dictation, and read-aloud also contact external services. Local storage does not mean offline processing.
 - **Inspectable behavior.** System prompts are visible and editable.
