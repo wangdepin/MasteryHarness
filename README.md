@@ -44,7 +44,9 @@ The screenshots are from upstream's interface.
 
 ## Install
 
-**Prebuilt installers: coming soon.** For now, build from source:
+**Prebuilt installers:** see [Releases](https://github.com/wangdepin/MasteryHarness/releases). The macOS build is **unsigned**, so the first launch is blocked by Gatekeeper: open **System Settings → Privacy & Security → Open Anyway**, or run `xattr -dr com.apple.quarantine /Applications/MasteryHarness.app`. Unsigned builds do not update in-app; download the new version instead.
+
+Or build from source:
 
 ```bash
 git clone https://github.com/wangdepin/MasteryHarness.git

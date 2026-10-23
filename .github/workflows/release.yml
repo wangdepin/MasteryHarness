@@ -102,7 +102,7 @@ jobs:
             platform: linux-x64
             builder_args: --linux --x64
     runs-on: ${{ matrix.os }}
-    # Apple's notarization queue has taken ~2 hours for this team.
+    # Apple's notarization queue (signed path only) has taken ~2 hours.
     timeout-minutes: 180
     defaults:
       run:
@@ -131,7 +131,12 @@ jobs:
       - run: npm run build
       - run: node scripts/build-server.mjs
       - run: node scripts/smoke-server.mjs --electron
-      - name: Validate macOS release secrets
+      # Signing is optional (free path: no Apple Developer account). All five
+      # secrets present → signed + notarized; none → unsigned, ad-hoc sealed
+      # (users allow it once in System Settings). A PARTIAL set is a
+      # misconfiguration and fails loudly instead of silently shipping unsigned.
+      - name: Detect macOS signing secrets
+        id: mac_signing
         if: github.event_name == 'push' && runner.os == 'macOS'
         env:
           CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
@@ -140,14 +145,22 @@ jobs:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
+          present=0
+          missing=""
           for name in CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; do
-            if [[ -z "${!name}" ]]; then
-              echo "::error::Missing signing/notarization secret: $name"
-              exit 1
-            fi
+            if [[ -n "${!name}" ]]; then present=$((present + 1)); else missing="$missing $name"; fi
           done
+          if [[ $present -eq 5 ]]; then
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+          elif [[ $present -eq 0 ]]; then
+            echo "::notice::No macOS signing secrets: building an UNSIGNED macOS release."
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::Partial macOS signing configuration; missing:$missing"
+            exit 1
+          fi
       - name: Signed and notarized macOS release → draft
-        if: github.event_name == 'push' && runner.os == 'macOS'
+        if: github.event_name == 'push' && runner.os == 'macOS' && steps.mac_signing.outputs.signed == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
@@ -156,6 +169,13 @@ jobs:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: npx electron-builder ${{ matrix.builder_args }} --publish always -c.forceCodeSigning=true
+      - name: Unsigned macOS release → draft
+        if: github.event_name == 'push' && runner.os == 'macOS' && steps.mac_signing.outputs.signed != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          LH_ADHOC_SIGN: "1"
+        run: npx electron-builder ${{ matrix.builder_args }} --publish always -c.mac.notarize=false -c.mac.identity=null
       - name: Windows/Linux release → draft
         if: github.event_name == 'push' && runner.os != 'macOS'
         env:
@@ -165,7 +185,8 @@ jobs:
         if: github.event_name == 'workflow_dispatch' && runner.os == 'macOS'
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
-        run: npx electron-builder ${{ matrix.builder_args }} --publish never -c.mac.notarize=false
+          LH_ADHOC_SIGN: "1"
+        run: npx electron-builder ${{ matrix.builder_args }} --publish never -c.mac.notarize=false -c.mac.identity=null
       - name: Windows/Linux rehearsal (no publish)
         if: github.event_name == 'workflow_dispatch' && runner.os != 'macOS'
         run: npx electron-builder ${{ matrix.builder_args }} --publish never

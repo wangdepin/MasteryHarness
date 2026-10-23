@@ -4,7 +4,7 @@
 
 | Platform | Build runner | Packages | In-app update |
 |---|---|---|---|
-| macOS, Apple Silicon | `macos-26` (arm64) | signed/notarized DMG + ZIP | ZIP via Squirrel.Mac |
+| macOS, Apple Silicon | `macos-26` (arm64) | DMG + ZIP — signed/notarized when the secrets below exist, otherwise unsigned with an ad-hoc seal | ZIP via Squirrel.Mac (signed builds only; see [Unsigned macOS builds](#unsigned-macos-builds)) |
 | Windows, x64 | `windows-2025` | unsigned per-user NSIS installer | NSIS |
 | Linux, x64 | `ubuntu-24.04` | AppImage + `.deb` | AppImage replacement; `.deb` through dpkg/apt with elevation if needed |
 
@@ -47,7 +47,7 @@ npx electron-builder --linux --x64 --publish never
 `.github/workflows/release.yml` has two deliberately separate modes:
 
 - **Manual / Run workflow:** unsigned rehearsal installers saved as workflow artifacts for 7 days. No signing secrets needed, no release created, and nothing published. macOS notarization is skipped. Use the Windows/Linux artifacts for the first human smoke pass. These are not production macOS installers.
-- **Push `v<package.json version>`:** gates first, then one job creates or reuses a **single draft GitHub Release** before the three OS jobs package/upload their artifacts and update metadata in parallel. This avoids competing draft creation. A published or ambiguous existing release fails the preparation step instead of being modified. Separate runs for the same ref are serialized, never cancelled mid-upload. The tag must match the package version. macOS must sign and notarize successfully; missing secrets fail loudly. The workflow never publishes the draft. After all three packaging jobs succeed, a final read-only **Verify draft release** job (below) fails the run unless that draft is complete and self-consistent.
+- **Push `v<package.json version>`:** gates first, then one job creates or reuses a **single draft GitHub Release** before the three OS jobs package/upload their artifacts and update metadata in parallel. This avoids competing draft creation. A published or ambiguous existing release fails the preparation step instead of being modified. Separate runs for the same ref are serialized, never cancelled mid-upload. The tag must match the package version. macOS signs and notarizes when **all five** secrets exist, builds unsigned when **none** exist, and fails loudly on a partial set. The workflow never publishes the draft. After all three packaging jobs succeed, a final read-only **Verify draft release** job (below) fails the run unless that draft is complete and self-consistent.
 
 The three jobs upload distinct updater feeds: `latest-mac.yml`, `latest.yml`, `latest-linux.yml`, with the matching ZIP/NSIS/AppImage/deb assets and blockmaps. **A partially populated draft is never fit to publish — and the final job enforces it mechanically.** The app uses the baked GitHub feed without a token: **the repository must be public before end users can download updates.** Making the repository public and publishing the release remain the owner's actions.
 
@@ -72,7 +72,16 @@ The three jobs upload distinct updater feeds: `latest-mac.yml`, `latest.yml`, `l
 
 The job only reads (release list + asset downloads); it never creates, edits, publishes, or deletes anything.
 
-## macOS CI secrets
+## Unsigned macOS builds
+
+Signing needs a paid Apple Developer account, so it is optional. With no signing secrets the macOS job runs `electron-builder` with `-c.mac.identity=null -c.mac.notarize=false` and `LH_ADHOC_SIGN=1`; `scripts/after-pack.cjs` then ad-hoc signs the bundle (`codesign --force --deep --sign -`). Without that seal an Apple Silicon Mac refuses to run the app, because the shell edits `Info.plist` and renames the executable.
+
+What users see:
+
+- Gatekeeper blocks the first launch. Allow it once under **System Settings → Privacy & Security → Open Anyway**, or run `xattr -dr com.apple.quarantine /Applications/MasteryHarness.app`.
+- **No in-app update.** Squirrel.Mac only installs a signed update, so unsigned builds are updated by downloading the new DMG from the Releases page.
+
+## macOS CI secrets (optional)
 
 Add these under repository **Settings → Secrets and variables → Actions**:
 
@@ -89,8 +98,8 @@ The workflow maps the certificate secrets to electron-builder's `CSC_LINK` / `CS
 ## First release runbook
 
 1. Push the implementation; run the manual Desktop release workflow.
-2. Human smoke on Windows/Linux: install/open, window buttons and dragging, sidebar at narrow widths, zoom, setup/keys, session/resume, native PDF/SVG verification and demo helper. macOS remains signed/notarized through the production path.
-3. Add macOS signing/notarization secrets.
+2. Human smoke on Windows/Linux: install/open, window buttons and dragging, sidebar at narrow widths, zoom, setup/keys, session/resume, native PDF/SVG verification and demo helper. The macOS rehearsal is unsigned (ad-hoc sealed); the signed production path only runs when the secrets exist.
+3. Optional: add macOS signing/notarization secrets. Without them the release ships an unsigned macOS build.
 4. Bump `package.json` and the lockfile to the agreed release version; run local gates and push a matching `v...` tag.
 5. Wait for **all three** packaging jobs **and the final Verify draft release job** — the gate mechanically checks the draft's 11 assets and the three update feeds (single draft, right names/version/sizes/upload state, feeds referencing only what the release actually holds). If it fails, fix the cause and re-run the workflow before publishing; electron-builder replaces same-named assets on re-upload, and the gate rejects leftovers.
 6. Owner makes the repository public, publishes the complete draft, then checks the real GitHub update path using a prior installed version.

@@ -14,6 +14,15 @@
 //
 // Windows/Linux builds return immediately (their icons are static files:
 // build/icon.ico / build/icon.png).
+//
+// UNSIGNED RELEASES: with no Developer ID identity (release.yml's unsigned
+// path sets LH_ADHOC_SIGN=1 and electron-builder skips signing), the bundle
+// would keep a broken seal — the shell edits Info.plist and renames the
+// executable — and an Apple Silicon Mac refuses to run it even after the
+// quarantine flag is cleared. An ad-hoc signature (`-`, no certificate, no
+// Apple account) restores a valid seal; Gatekeeper still asks the user to
+// allow the app once.
+const { execFileSync } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
 
@@ -24,4 +33,7 @@ module.exports = async function afterPack(context) {
 	const source = path.join(context.packager.info.projectDir, "build", "icon.icns");
 	fs.copyFileSync(source, target);
 	console.log(`[after-pack] pre-Tahoe fallback icns (full-res) → ${target}`);
+	if (process.env.LH_ADHOC_SIGN !== "1") return;
+	execFileSync("codesign", ["--force", "--deep", "--sign", "-", appBundle], { stdio: "inherit" });
+	console.log(`[after-pack] ad-hoc signed ${appBundle}`);
 };
