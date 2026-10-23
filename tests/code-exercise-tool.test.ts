@@ -16,6 +16,7 @@ import {
 	teachCodeExerciseToolFor,
 	type TeacherToolContext,
 } from "../src/agent/tools.ts";
+import { composeInstructions } from "../src/agent/teacher-agent.ts";
 import { CODE_EXERCISE_TOOL } from "../src/core/code-exercise.ts";
 import { jobStore } from "../src/store/jobs.ts";
 import { chatStore } from "../src/store/chats.ts";
@@ -126,5 +127,25 @@ describe("code-exercises placement", () => {
 		assert.ok(json, "the description carries a json example");
 		assert.deepEqual(JSON.parse(json), codeExerciseExampleBody);
 		assert.equal(Value.Check(tool.parameters, codeExerciseExampleBody), true);
+	});
+});
+
+describe("the teacher prompt teaches code-exercises", () => {
+	const fragment = fs.readFileSync("src/agent/prompts/teacher/32-code-exercises.md", "utf-8").trim();
+
+	it("composes into the teacher verbatim, and only the teacher", () => {
+		assert.ok(composeInstructions("teacher").includes(fragment));
+		assert.ok(!composeInstructions("prober").includes(fragment), "the prober never holds the tool");
+		assert.ok(!composeInstructions("practice").includes(fragment));
+	});
+
+	it("names the tool and every field and result key it relies on", () => {
+		for (const name of [CODE_EXERCISE_TOOL, "starterCode", "tests", "explanation", "question", "passed", "runs", "thinking", "timedOut"]) {
+			assert.ok(fragment.includes(`\`${name}\``), `the fragment references \`${name}\``);
+		}
+	});
+
+	it("stays small (always in context)", () => {
+		assert.ok(fragment.length < 4_500, `${fragment.length} chars`);
 	});
 });
