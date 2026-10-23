@@ -1,21 +1,28 @@
-import type { CodeLanguage, CodeRuntime } from "@/src/core";
+import type { CodeLanguage, CodeRunRequest, CodeRunResult, CodeRuntime } from "@/src/core";
 import { createBrowserPythonRuntime } from "@/components/python-runtime-iframe";
 
-/**
- * TEMPORARY (B4): Pyodide is fetched from jsDelivr at this pinned version.
- * B5 replaces it with a distribution bundled into the app (offline, packaged
- * Electron); this constant is the only place the URL lives.
- */
-const PYODIDE_INDEX_URL = "https://cdn.jsdelivr.net/pyodide/v314.0.7/full/";
+/** Pyodide ships with the app: public/pyodide/ (scripts/copy-pyodide.mjs),
+ *  served by the app's own server. Absolute, because the runner's worker
+ *  lives in an opaque-origin iframe where a relative URL resolves to nothing. */
+const pyodideIndexUrl = (): string => `${window.location.origin}/pyodide/`;
 
 const runtimes = new Map<CodeLanguage, CodeRuntime>();
 
 /** The shared runtime for a language. One per page: the Pyodide download and
- *  its worker are created on the first run and reused by every exercise. */
+ *  its worker are created on the first run and reused by every exercise. The
+ *  browser runtime itself is built lazily inside `run` — the dock also renders
+ *  on the server, where there is no `window` to resolve the app origin from. */
 export function codeRuntimeFor(language: CodeLanguage): CodeRuntime {
 	let runtime = runtimes.get(language);
 	if (!runtime) {
-		runtime = createBrowserPythonRuntime(PYODIDE_INDEX_URL);
+		let browserRuntime: CodeRuntime | undefined;
+		runtime = {
+			language,
+			run: (request: CodeRunRequest): Promise<CodeRunResult> => {
+				browserRuntime ??= createBrowserPythonRuntime(pyodideIndexUrl());
+				return browserRuntime.run(request);
+			},
+		};
 		runtimes.set(language, runtime);
 	}
 	return runtime;

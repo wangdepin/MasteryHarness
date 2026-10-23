@@ -11,6 +11,9 @@ SCOPE.md
 real-data-extraction/
 dist/
 
+# Pyodide runtime copied from node_modules by scripts/copy-pyodide.mjs
+public/pyodide/
+
 # dev auth/keys store (auth-keys wave): repo-root auth.json — secrets never committed
 auth.json
 

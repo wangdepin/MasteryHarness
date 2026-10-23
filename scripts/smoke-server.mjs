@@ -95,6 +95,25 @@ function get(url) {
 	});
 }
 
+/** The code-exercise runtime: the standalone server must serve Pyodide's
+ *  largest file WITH the CORS header its opaque-origin sandbox iframe needs
+ *  (next.config.ts headers()). Resolves a problem string, or null when fine. */
+function pyodideProblem(url) {
+	return new Promise((resolve) => {
+		const req = http.get(`${url}/pyodide/pyodide.asm.wasm`, (res) => {
+			res.resume();
+			if (res.statusCode !== 200) resolve(`GET /pyodide/pyodide.asm.wasm → ${res.statusCode} (expected 200)`);
+			else if (res.headers["access-control-allow-origin"] !== "*") resolve("/pyodide/ is served without Access-Control-Allow-Origin: *");
+			else resolve(null);
+		});
+		req.on("error", (err) => resolve(`GET /pyodide/pyodide.asm.wasm failed: ${err.message}`));
+		req.setTimeout(5000, () => {
+			req.destroy();
+			resolve("GET /pyodide/pyodide.asm.wasm timed out");
+		});
+	});
+}
+
 async function main() {
 	await checkOAuthFlows();
 	// HTTP boot alone never imports the dynamically loaded demo engine.
@@ -183,6 +202,11 @@ async function main() {
 			if (status !== 200) throw new Error(`GET ${route} → ${status} (expected 200)`);
 			console.log(`[smoke-server] GET ${route} → 200`);
 		}
+
+		// 3) The bundled Pyodide runtime (code exercises) is served with CORS.
+		const pyodide = await pyodideProblem(url);
+		if (pyodide) throw new Error(pyodide);
+		console.log("[smoke-server] GET /pyodide/pyodide.asm.wasm → 200 with CORS");
 	} catch (err) {
 		failed = err;
 	} finally {

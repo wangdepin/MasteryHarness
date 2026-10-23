@@ -95,6 +95,14 @@ const nextConfig: NextConfig = {
 			"node_modules/@earendil-works/pi-agent-core/dist/**/*.json",
 		],
 	},
+	// The Pyodide runtime (public/pyodide/, copied by scripts/copy-pyodide.mjs)
+	// is loaded by a worker inside an OPAQUE-origin sandboxed iframe
+	// (components/python-runtime-iframe.ts), so every fetch of it is
+	// cross-origin and needs CORS. Static files in public/ ride the standalone
+	// copy in scripts/build-server.mjs — no output tracing involved.
+	async headers() {
+		return [{ source: "/pyodide/:path*", headers: [{ key: "Access-Control-Allow-Origin", value: "*" }] }];
+	},
 	// Framework-free core lives in src/ (plain TS, imported by routes and CLI alike).
 	// The pi engine must stay external: its providers are runtime-loaded Node
 	// code (undici streams, catalog data) that breaks when bundled into routes.

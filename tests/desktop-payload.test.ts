@@ -26,6 +26,7 @@ function withPayload(test: (fixture: {
 		write(path.join(STANDALONE, "server.js"));
 		write(path.join(".next", "static", "runtime.js"));
 		write(path.join("public", "asset.txt"));
+		write(path.join("public", "pyodide", "pyodide.asm.wasm"));
 		write(path.join(STANDALONE, PROMPT));
 		write(path.join(STANDALONE, "src", "agent", "prompts", "teacher", "20-teaching.md"));
 		test({ root, write, run: () => spawnSync(process.execPath, [path.join(root, "scripts", "build-server.mjs")], {
@@ -71,6 +72,15 @@ describe("desktop standalone payload", () => {
 				assert.equal(result.status, 0, String(result.stderr));
 				assert.match(String(result.stdout), /server payload ready/);
 			}
+		});
+	});
+
+	it("refuses a build without the bundled Pyodide runtime", () => {
+		withPayload(({ root, run }) => {
+			fs.rmSync(path.join(root, "public", "pyodide"), { recursive: true });
+			const result = run();
+			assert.notEqual(result.status, 0);
+			assert.match(String(result.stderr), /public\/pyodide\/ is missing/);
 		});
 	});
 

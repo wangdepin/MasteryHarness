@@ -17,6 +17,7 @@
 		"build": "next build",
 		"start": "next start",
 		"test": "NODE_ENV=test tsx --test tests/*.test.ts tests/*.test.tsx",
+		"postinstall": "node scripts/copy-pyodide.mjs",
 		"lint": "eslint .",
 		"typecheck": "tsc --noEmit",
 		"desktop:dev": "concurrently -k \"next dev\" \"LH_DEV_URL=http://localhost:3000 electron .\"",
@@ -84,6 +85,7 @@
 		"eslint": "^9.39.5",
 		"eslint-import-resolver-typescript": "^4.4.5",
 		"eslint-plugin-import": "^2.32.0",
+		"pyodide": "314.0.7",
 		"tailwindcss": "^4.3.3",
 		"tsx": "^4.19.0",
 		"typescript": "^5.6.0"

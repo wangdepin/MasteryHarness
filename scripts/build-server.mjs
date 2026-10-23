@@ -38,6 +38,13 @@ copyTree(staticFrom, staticTo);
 if (exists(path.join(ROOT, "public"))) {
 	copyTree(path.join(ROOT, "public"), path.join(STANDALONE, "public"));
 }
+// The code-exercise runtime must ship in the app (no CDN): public/pyodide/ is
+// copied from the pinned npm package at install time (scripts/copy-pyodide.mjs).
+if (!exists(path.join(STANDALONE, "public", "pyodide", "pyodide.asm.wasm"))) {
+	console.error("[build-server] REFUSING: public/pyodide/ is missing — code exercises could not run in the app.");
+	console.error("             Run `node scripts/copy-pyodide.mjs` (needs the pyodide devDependency installed).");
+	process.exit(1);
+}
 
 // 2) Safety: the repo's real data/ must NEVER ride along in the bundle.
 const leakedData = path.join(STANDALONE, "data");
