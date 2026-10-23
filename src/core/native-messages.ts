@@ -349,7 +349,7 @@ export function concludedByDismissalPair(
  *  subject is the call, not a dangling result). */
 /** The ids of tool calls whose results are CLEAN (not errored) — the only
  *  calls that ever happened, per the honest-activation ruling. */
-function cleanToolCallIds(messages: readonly LhMessage[]): Set<string> {
+export function cleanToolCallIds(messages: readonly LhMessage[]): Set<string> {
 	const ids = new Set<string>();
 	for (const m of messages) {
 		if ((m as { role?: string }).role !== "toolResult") continue;
