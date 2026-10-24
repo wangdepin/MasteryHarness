@@ -64,6 +64,7 @@
  */
 
 import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { NotesImportErrors, useNotesImport } from "@/components/notes-import.tsx";
 import Link from "next/link";
 import { FileTextIcon, ListTreeIcon, Loader2Icon, SearchIcon, SettingsIcon, UploadIcon, WaypointsIcon } from "lucide-react";
 import { incrementalLayout, propositionSessionHref, type GraphCostSummary, type GraphNode, type GraphSnapshot } from "@/src/core";
@@ -1091,29 +1092,19 @@ export function GraphView({
 	// /api/graph/import; the runs surface in the status chips below, and the
 	// graph refetches when they finish (the runs-empty transition).
 	const fileInputRef = useRef<HTMLInputElement>(null);
-	const [importing, setImporting] = useState(false);
 	// The dock's start-site nudge (accuracy wave, 2026-09-19): the import
 	// POST awaits the WHOLE pipeline server-side, so the run registers long
 	// before the response — nudge at click and again at +600ms to catch the
 	// start; from its first setPhase the run announces itself on the events
 	// channel (S5), and the dock rides those announcements thereafter.
 	const refreshActivity = useActivity().refresh;
-	const onImportFiles = (files: FileList | null) => {
-		if (!files || files.length === 0) return;
-		setImporting(true);
-		refreshActivity();
-		setTimeout(() => refreshActivity(), 600);
-		const form = new FormData();
-		for (const file of Array.from(files)) form.append("files", file);
-		fetch("/api/graph/import", { method: "POST", body: form })
-			.then(async (res) => {
-				const body = (await res.json()) as { results: { filePath: string; ok: boolean }[] };
-				const failed = body.results.filter((r) => !r.ok);
-				if (failed.length > 0) console.error("notes import failed for:", failed);
-			})
-			.catch((err) => console.error("import failed:", err))
-			.finally(() => setImporting(false));
-	};
+	const notesImport = useNotesImport({
+		onStart: () => {
+			refreshActivity();
+			setTimeout(() => refreshActivity(), 600);
+		},
+	});
+	const { importing, onImportFiles } = notesImport;
 
 	// Background pipeline status: read /api/graph/status; whenever a run
 	// LEAVES the feed (finished / aborted / failed), refetch the graph.
@@ -1617,6 +1608,7 @@ export function GraphView({
 				/>
 			</div>
 
+			<NotesImportErrors errors={notesImport.errors} />
 			{/* Top-right tail (owner, 2026-09-20): the pipeline cost number —
 			    just a number, hover-highlighted, dropdown breakdown — then
 			    the running-pipeline pills under it. Lives BELOW the actions

@@ -214,7 +214,7 @@ export function SidebarToggle() {
  * phases only advance (all sessions end in Teaching — phase-as-signal was
  * decoration, now retired app-wide), and question-pending is the dominant
  * RESTING state of real sessions — a resting state has no scan value, so
- * the meta line's "Waiting for your answer" text carries it. Idle is the
+ * the meta line's "Waiting for input" text carries it. Idle is the
  * absence of a signal, by design.
  */
 function SessionStatus({ busy }: { busy: boolean }) {
@@ -251,7 +251,7 @@ export function timeAgo(iso: string, now = new Date()): string {
  *  ever wanted. */
 function sessionMeta(chat: ChatListItem): string {
 	if (chat.compacting) return `Compacting context · ${timeAgo(chat.updatedAt)}`;
-	if (chat.pendingQuestion) return `Waiting for your answer · ${timeAgo(chat.updatedAt)}`;
+	if (chat.pendingQuestion) return `Waiting for input · ${timeAgo(chat.updatedAt)}`;
 	if ((chat.kind ?? "teach") === "practice" && chat.pendingProblem) {
 		return `Problem waiting · ${timeAgo(chat.updatedAt)}`;
 	}

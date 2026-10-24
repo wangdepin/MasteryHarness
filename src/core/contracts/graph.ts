@@ -95,11 +95,9 @@ export interface NotesSource {
 	filePath: string;
 	/** ISO — when this file was imported (the checkpoint's foldedAt). */
 	importedAt: string;
-	/** sha256 of the imported text at the last EXTRACTION run — the
-	 *  same-path re-import guard (owner, 2026-09-29): a matching
-	 *  fingerprint is a TRUE no-op (no model calls, no usage record);
-	 *  a mismatch or a legacy missing stamp re-runs the whole file.
-	 *  The mappings ledger used to give this idempotency by accident. */
+	/** Legacy content fingerprint. Accepted when reading old records, but
+	 * ignored: every explicit notes import processes the whole file. New
+	 * imports do not compute or write this field. No migration is needed. */
 	contentFp?: string;
 	/** The run's usage log — same append-only discipline as
 	 *  ChatRecord.extractions, idempotent per startedAt. */

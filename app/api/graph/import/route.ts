@@ -13,7 +13,7 @@
  * healthy. The dock's chips + graph refetch track progress live through
  * /api/graph/status, as with session runs.
  */
-import { extraction } from "@/src/server";
+import { extraction, NotesImportError } from "@/src/server";
 import {
 	ModelsNotConfiguredError,
 	PROVIDER_KEY_MISSING_CODE,
@@ -24,6 +24,8 @@ import {
 export const dynamic = "force-dynamic";
 
 interface ImportResult {
+	requestIndex: number;
+	outcome: "completed" | "failed" | "partial" | "aborted" | "busy";
 	filePath: string;
 	ok: boolean;
 	stats?: EmissionStats;
@@ -46,20 +48,22 @@ export async function POST(request: Request) {
 	}
 
 	const results: ImportResult[] = [];
-	const queue = [...files];
+	const queue = files.map((file, requestIndex) => ({ file, requestIndex }));
 	const workers = Array.from({ length: Math.min(3, files.length) }, async () => {
 		for (;;) {
-			const file = queue.shift();
-			if (!file) return;
+			const next = queue.shift();
+			if (!next) return;
+			const { file, requestIndex } = next;
 			try {
 				const text = await file.text();
 				const stats = await extraction.importNotes({ filePath: file.name, text });
-				results.push({ filePath: file.name, ok: true, stats });
+				results.push({ filePath: file.name, requestIndex, outcome: "completed", ok: true, stats });
 			} catch (err) {
 				if (err instanceof ModelsNotConfiguredError) {
 					results.push({
 						filePath: file.name,
 						ok: false,
+						requestIndex, outcome: "failed",
 						error: err.envelope.error,
 						code: "models_not_configured",
 						missing: err.envelope.missing,
@@ -70,6 +74,7 @@ export async function POST(request: Request) {
 					results.push({
 						filePath: file.name,
 						ok: false,
+						requestIndex, outcome: "failed",
 						error: err.envelope.error,
 						code: PROVIDER_KEY_MISSING_CODE,
 						provider: err.envelope.provider,
@@ -77,7 +82,12 @@ export async function POST(request: Request) {
 					});
 					continue;
 				}
-				results.push({ filePath: file.name, ok: false, error: err instanceof Error ? err.message : String(err) });
+				results.push({
+					filePath: file.name, requestIndex, ok: false,
+					outcome: err instanceof NotesImportError ? err.outcome : "failed",
+					...(err instanceof NotesImportError ? { stats: err.partialStats } : {}),
+					error: err instanceof Error ? err.message : String(err),
+				});
 			}
 		}
 	});

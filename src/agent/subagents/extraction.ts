@@ -742,6 +742,20 @@ export interface NotesImportInput {
 	text: string;
 }
 
+/** A notes import did not finish. Earlier graph writes and billed usage are
+ * retained; partialStats describe known merges, not an all-or-nothing result. */
+export class NotesImportError extends Error {
+	constructor(
+		public readonly outcome: "failed" | "partial" | "aborted" | "busy",
+		public readonly partialStats: EmissionStats,
+		message: string,
+		options?: ErrorOptions,
+	) {
+		super(message, options);
+		this.name = "NotesImportError";
+	}
+}
+
 export interface ExtractionPipeline {
 	/** Extract + audit + merge ONE chat. Single-flight per chat; resolves to
 	 *  the merger's append stats (or throws — no checkpoint on failure). */
@@ -1285,9 +1299,9 @@ export function createExtractionPipeline(deps: ExtractionPipelineDeps): Extracti
 
 	async function runNotesExtraction(input: { id: string; filePath: string; text: string; importedAt: string }): Promise<EmissionStats> {
 		const { id } = input;
-		if (inFlight.has(id)) return { nodes: 0, chains: 0 };
-		inFlight.add(id);
+		// importNotes owns the source exclusion, including metadata and cleanup.
 		const t0 = performance.now();
+		const mergedStats: EmissionStats = { nodes: 0, chains: 0 };
 		try {
 			// BYOK per-need gate (owner, 2026-09-22) + key presence
 			// (2026-09-25): same refusal as the chat front door — no
@@ -1313,11 +1327,15 @@ export function createExtractionPipeline(deps: ExtractionPipelineDeps): Extracti
 			const settled: PromiseSettledResult<EmissionStats>[] = [];
 			for (const [chunkIndex, chunk] of chunks.entries()) {
 				const part = chunks.length > 1 ? { i: chunkIndex + 1, n: chunks.length } : undefined;
+				// Keep the actual signal after runJob tears down its registry row:
+				// usage persistence can throw and mask the body's AbortError.
+				let chunkSignal: AbortSignal | undefined;
 				try {
 					settled.push({
 						status: "fulfilled",
 						value: await runJob({ id, kind: "notes", label: input.filePath, part }, async (jobKey) => {
 							setPhase(jobKey, "queued", "notes", input.filePath, part);
+							chunkSignal = runningExtractions.get(jobKey)?.controller.signal;
 							const findings = await withExtractSlot(jobKey, async () => {
 								setPhase(jobKey, "extracting", "notes", input.filePath, part);
 								return notesExtract(jobKey, { ...input, text: chunk, part });
@@ -1337,6 +1355,11 @@ export function createExtractionPipeline(deps: ExtractionPipelineDeps): Extracti
 									{ chatStore, graphStore },
 									{ foldedAt: input.importedAt },
 								);
+								// Capture the committed merge BEFORE layout/usage can fail.
+								mergedStats.nodes += merged.nodes;
+								mergedStats.chains! += merged.chains ?? 0;
+								if (merged.droppedChains)
+									mergedStats.droppedChains = (mergedStats.droppedChains ?? 0) + merged.droppedChains;
 								// The layout ledger evolves with each merge — the next
 								// snapshot fetch reflects every finished chunk.
 								settleGraphLayout(graphStore);
@@ -1346,46 +1369,63 @@ export function createExtractionPipeline(deps: ExtractionPipelineDeps): Extracti
 						}),
 					});
 				} catch (err) {
-					settled.push({ status: "rejected", reason: err });
+					let failure = err;
+					if (chunkSignal?.aborted && !(err instanceof Error && err.name === "AbortError")) {
+						// Notes-only: never start a fresh chunk after user cancellation,
+						// even when usage cleanup replaced the original abort rejection.
+						// Keep the secondary failure visible in the final import error.
+						const aborted = new Error(`Notes import aborted; job cleanup failed: ${err instanceof Error ? err.message : String(err)}`, { cause: err });
+						aborted.name = "AbortError";
+						failure = aborted;
+					}
+					settled.push({ status: "rejected", reason: failure });
 					// Same source-wide-abort law as the chat door: stop the
 					// run; isolated failures keep going.
-					if (err instanceof Error && err.name === "AbortError") break;
+					if (failure instanceof Error && failure.name === "AbortError") break;
 				}
 			}
 			const stats = aggregateJobs(id, settled);
+			// Completion is a chunk-status contract, never a node-count test.
+			// Zero findings (and an empty file after the readiness gate) are valid.
+			const rejected = settled.filter((r) => r.status === "rejected");
+			if (rejected.length > 0 || settled.length !== chunks.length) {
+				const aborted = rejected.some((r) => r.reason instanceof Error && r.reason.name === "AbortError");
+				const outcome = aborted ? "aborted" : settled.some((r) => r.status === "fulfilled") ? "partial" : "failed";
+				const details = rejected.map((r) => r.reason instanceof Error ? r.reason.message : String(r.reason)).join("; ");
+				throw new NotesImportError(outcome, mergedStats, details || "Notes import did not complete");
+			}
 			console.info(
 				`[extraction ${id}] merged: ${stats.nodes} nodes, ${stats.chains ?? 0} chains ` +
 					`(${Math.round(performance.now() - t0)}ms total, ${chunks.length} chunk job(s))`,
 			);
 			return stats;
 		} catch (err) {
-			// Pre-fan-out failures only (stage gate, chunking): job-level
-			// failures and aborts are absorbed at the fan-out site, per job,
-			// with their usage records already persisted.
 			console.error(`[extraction ${id}] notes pipeline failed (${Math.round(performance.now() - t0)}ms):`, err);
-			throw err;
+			if (err instanceof NotesImportError || err instanceof ModelsNotConfiguredError || err instanceof ProviderKeyMissingError) throw err;
+			throw new NotesImportError(err instanceof Error && err.name === "AbortError" ? "aborted" : "failed", mergedStats,
+				err instanceof Error ? err.message : String(err), { cause: err });
 		} finally {
-			inFlight.delete(id);
 			finishExtraction(id); // done or failed — no longer running
 		}
 	}
 
-	/** Import ONE raw notes file: register the source (deterministic id per
-	 *  file path — re-import keeps the same identity and its usage history)
-	 *  and run the pipeline over it. Re-import guard (owner, 2026-09-29):
-	 *  the file's content fingerprint decides — unchanged text is a TRUE
-	 *  no-op (the mappings ledger used to dedupe this at merge time by
-	 *  accident); changed text re-runs the whole file. */
+	/** Every explicit import processes the whole file. Identity, source digest,
+	 * auditor and usage history remain source-scoped; this is not exactly-once. */
 	async function importNotes(input: NotesImportInput): Promise<EmissionStats> {
 		const id = `src_${crypto.createHash("sha256").update(input.filePath).digest("hex").slice(0, 12)}`;
-		const contentFp = crypto.createHash("sha256").update(input.text).digest("hex").slice(0, 16);
-		if (graphStore.readSources().find((s) => s.id === id)?.contentFp === contentFp) {
-			console.info(`[extraction ${id}] re-import with unchanged content (fp match) — skipping`);
-			return { nodes: 0, chains: 0 };
+		// Acquire BEFORE source upsert: overlapping contents must not alter metadata.
+		if (inFlight.has(id)) throw new NotesImportError("busy", { nodes: 0, chains: 0 }, "This file is already being imported. Try again when it finishes.");
+		inFlight.add(id);
+		try {
+			const importedAt = new Date().toISOString();
+			graphStore.upsertSource({ id, filePath: input.filePath, importedAt });
+			return await runNotesExtraction({ id, ...input, importedAt });
+		} catch (err) {
+			if (err instanceof NotesImportError || err instanceof ModelsNotConfiguredError || err instanceof ProviderKeyMissingError) throw err;
+			throw new NotesImportError("failed", { nodes: 0, chains: 0 }, err instanceof Error ? err.message : String(err), { cause: err });
+		} finally {
+			inFlight.delete(id);
 		}
-		const importedAt = new Date().toISOString();
-		graphStore.upsertSource({ id, filePath: input.filePath, importedAt, contentFp });
-		return runNotesExtraction({ id, ...input, importedAt });
 	}
 
 	return { runExtraction, importNotes };

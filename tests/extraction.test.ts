@@ -22,9 +22,10 @@
  */
 
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import * as fs from "node:fs";
 import { after, describe, it } from "node:test";
-import { createFauxCore, fauxAssistantMessage, fauxToolCall, type FauxResponseStep, type ToolCall } from "@earendil-works/pi-ai";
+import { createFauxCore, fauxAssistantMessage, fauxToolCall, type FauxResponseStep, type ToolCall, type Usage } from "@earendil-works/pi-ai";
 import type { PiEngine } from "../src/agent/models.ts";
 import type { LhMessage } from "../src/core/native-messages.ts";
 import { newPlanBlockMessage } from "../src/core/native-messages.ts";
@@ -44,6 +45,7 @@ import type { GraphStore } from "../src/core/ports.ts";
 import {
 	abortExtraction,
 	createExtractionPipeline,
+	NotesImportError,
 	extractionStatuses,
 	transcriptView,
 	sourceDigest,
@@ -871,21 +873,30 @@ describe("the extraction pipeline (extractor → auditor → merger)", () => {
 		const verdict: AuditVerdicts = {
 			links: [{ id: FINDINGS.propositions[0]!.id, linkTo: existingId }],
 		};
+		const nativeUsage: Record<"extractor" | "auditor", Usage[]> = { extractor: [], auditor: [] };
+		const recordUsage = (stage: "extractor" | "auditor", engine: PiEngine): PiEngine => ({
+			...engine,
+			streamFn: (model, context, options) => {
+				const stream = engine.streamFn(model, context, options);
+				void stream.result().then((message) => nativeUsage[stage].push(message.usage));
+				return stream;
+			},
+		});
 		const pipeline = createExtractionPipeline({
 			chatStore,
 			graphStore: ledgers,
 			// During the auditor's generate, the registry must already carry
 			// the extractor's fully accumulated live usage (2 steps × 10/5).
-			extractor: submitModel("submit_findings", FINDINGS),
-			auditor: submitModel("submit_review", verdict, () =>
+			extractor: recordUsage("extractor", submitModel("submit_findings", FINDINGS)),
+			auditor: recordUsage("auditor", submitModel("submit_review", verdict, () =>
 				usageSeen.push(extractionStatuses().find((r) => r.chatId === chatId)?.usage.extractor?.steps.at(-1)?.inputTokens),
-			),
+			)),
 		});
 		await pipeline.runExtraction(chatId);
 
 		// Live: mid-audit the extractor's usage was fully accumulated (faux
 		// estimates tokens from the prompt/response text — deterministic,
-		// positive, no cache).
+		// positive, with native first-conversation cache writes in 1.4).
 		assert.equal(usageSeen.length, 1);
 		assert.ok(typeof usageSeen[0] === "number" && usageSeen[0]! > 0, "the extractor's step billed input tokens");
 
@@ -901,8 +912,16 @@ describe("the extraction pipeline (extractor → auditor → merger)", () => {
 		const step = run.stages.extractor.steps[0]!;
 		assert.ok(step.inputTokens! > 0 && step.outputTokens! > 0, "estimated usage captured");
 		assert.equal(step.cacheReadTokens, 0);
-		assert.equal(step.cacheWriteTokens, 0);
+		assert.equal(nativeUsage.extractor.length, 1);
+		assert.ok(nativeUsage.extractor[0]!.cacheWrite > 0, "fresh native conversation writes its cached prefix");
+		assert.equal(step.cacheReadTokens, nativeUsage.extractor[0]!.cacheRead);
+		assert.equal(step.cacheWriteTokens, nativeUsage.extractor[0]!.cacheWrite);
 		assert.equal(step.reasoningTokens, 0);
+		assert.equal(nativeUsage.auditor.length, 1);
+		assert.equal(run.stages.auditor.steps[0]!.cacheReadTokens, 0, "auditor owns a fresh conversation too");
+		assert.ok(nativeUsage.auditor[0]!.cacheWrite > 0);
+		assert.equal(run.stages.auditor.steps[0]!.cacheReadTokens, nativeUsage.auditor[0]!.cacheRead);
+		assert.equal(run.stages.auditor.steps[0]!.cacheWriteTokens, nativeUsage.auditor[0]!.cacheWrite);
 		assert.equal(run.stages.auditor.steps.length, 1);
 		assert.ok(!Number.isNaN(Date.parse(run.at)));
 	});
@@ -1584,7 +1603,7 @@ describe("the notes front door (importNotes — format-agnostic)", () => {
 		assert.equal(ledgers.readCoverage().length, 0, "nothing checkpointed — the messages stay re-runnable");
 	});
 
-	it("re-importing is fingerprint-guarded: unchanged text is a TRUE no-op; changed text re-runs (owner, 2026-09-29)", async () => {
+	it("every explicit import runs the whole file, even identical text and legacy fingerprints", async () => {
 		const ledgers = memoryLedgers();
 		const mk = () =>
 			createExtractionPipeline({
@@ -1596,23 +1615,21 @@ describe("the notes front door (importNotes — format-agnostic)", () => {
 		const first = await mk().importNotes({ filePath: "/vault/learn vim.md", text: NOTES_TEXT });
 		assert.deepEqual(first, { nodes: 1, chains: 0 });
 
-		// Unchanged text: the content fingerprint matches — no extraction
-		// at all (no model calls, no usage record; the mappings ledger
-		// used to give this no-op at merge time by accident).
+		// A legacy stamp must never suppress an explicit import.
+		ledgers.upsertSource({ ...ledgers.readSources()[0]!, contentFp: createHash("sha256").update(NOTES_TEXT).digest("hex").slice(0, 16) });
 		const second = await mk().importNotes({ filePath: "/vault/learn vim.md", text: NOTES_TEXT });
-		assert.deepEqual(second, { nodes: 0, chains: 0 }, "unchanged content is a true no-op");
+		assert.deepEqual(second, { nodes: 1, chains: 0 }, "identical content re-extracts");
+		assert.equal(ledgers.readSources()[0]!.contentFp, undefined, "new imports write no fingerprint");
 
 		assert.equal(ledgers.readSources().length, 1, "one source identity — the path hashes to the same id");
-		assert.equal(ledgers.readSources()[0]!.extractions?.length, 1, "only the real run billed its usage");
-		assert.equal(ledgers.readNodes().length, 1, "no duplicate node");
+		assert.equal(ledgers.readSources()[0]!.extractions?.length, 2, "both runs bill usage");
+		assert.equal(ledgers.readNodes().length, 2, "the auditor, not a content skip, owns identity");
 
-		// Changed text under the same path: the fingerprint misses — the
-		// whole file re-runs (fresh merge; the auditor's links would dedupe
-		// identity on a real model).
+		// Changed text also re-runs the whole file.
 		const third = await mk().importNotes({ filePath: "/vault/learn vim.md", text: `${NOTES_TEXT}\nA new closing line.` });
 		assert.deepEqual(third, { nodes: 1, chains: 0 }, "changed content re-extracts");
-		assert.equal(ledgers.readSources()[0]!.extractions?.length, 2, "the re-run bills its usage");
-		assert.equal(ledgers.readNodes().length, 2);
+		assert.equal(ledgers.readSources()[0]!.extractions?.length, 3, "the re-run bills its usage");
+		assert.equal(ledgers.readNodes().length, 3);
 	});
 
 	it("aborts like a chat run: true cancellation, nothing merged, partial usage in the source record", async () => {
@@ -1627,7 +1644,7 @@ describe("the notes front door (importNotes — format-agnostic)", () => {
 
 		const srcId = extractionStatuses().find((r) => r.chatId.startsWith("src_"))!.chatId;
 		assert.equal(abortExtraction(srcId), true);
-		assert.deepEqual(await runPromise, { nodes: 0, chains: 0 });
+		await assert.rejects(runPromise, (error) => error instanceof NotesImportError && error.outcome === "aborted" && error.partialStats.nodes === 0);
 		assert.equal(ledgers.readNodes().length, 0, "nothing merged");
 		assert.equal(ledgers.readCheckpoints().length, 0, "nothing checkpointed");
 		assert.equal(ledgers.readSources()[0]!.extractions?.length, 1, "partial usage still persisted");
@@ -1935,7 +1952,7 @@ describe("per-chunk parallel jobs (owner, 2026-09-28)", () => {
 		// SOURCE-WIDE abort: the parked job dies and the run ENDS — no
 		// later chunk ever mints (fresh rows would hang un-aborted).
 		assert.equal(abortExtraction(srcId), true);
-		assert.deepEqual(await runPromise, { nodes: 0, chains: 0 });
+		await assert.rejects(runPromise, (error) => error instanceof NotesImportError && error.outcome === "aborted");
 		assert.equal(extractionStatuses().filter((r) => r.chatId === srcId).length, 0, "all rows leave the registry");
 		assert.equal(ledgers.readNodes().length, 0, "nothing merged");
 		// Per-job usage: the ONE minted job persisted its (failed) spend.
@@ -2316,5 +2333,192 @@ describe("chain simplification (the merger's maintenance pass, owner 2026-09-30 
 		assert.equal(stats.droppedChains, 1, "the simplification pass then removed it (maintenance)");
 		const stored = ledgers.readChains();
 		assert.equal(stored.length, 2, "the ledger is back to the two lean chains");
+	});
+});
+
+
+describe("notes import completion and retry reliability", () => {
+	const input = { filePath: "reliability.md", text: NOTES_TEXT };
+	const make = (graphStore: GraphStore, extractor = submitModel("submit_findings", NOTES_FINDINGS)) =>
+		createExtractionPipeline({ chatStore, graphStore, extractor, auditor: submitModel("submit_review", NOTES_VERDICT) });
+	const incomplete = (outcome: NotesImportError["outcome"], nodes: number) => (error: unknown) => {
+		assert.ok(error instanceof NotesImportError);
+		assert.equal(error.outcome, outcome);
+		assert.equal(error.partialStats.nodes, nodes);
+		return true;
+	};
+
+	it("failure followed by an unchanged retry really extracts and preserves both usage records", async () => {
+		const ledgers = memoryLedgers();
+		await assert.rejects(make(ledgers, silentModel()).importNotes(input), incomplete("failed", 0));
+		assert.deepEqual(await make(ledgers).importNotes(input), { nodes: 1, chains: 0 });
+		assert.equal(ledgers.readSources()[0]!.extractions?.length, 2);
+	});
+
+	it("zero new nodes and an empty file are successful, but the readiness gate still applies", async () => {
+		const ledgers = memoryLedgers();
+		assert.deepEqual(await make(ledgers, submitModel("submit_findings", { propositions: [], chains: [] })).importNotes(input), { nodes: 0, chains: 0 });
+		assert.deepEqual(await make(ledgers).importNotes({ ...input, text: " \n" }), { nodes: 0, chains: 0 });
+		await assert.rejects(createExtractionPipeline({ chatStore, graphStore: ledgers }).importNotes({ ...input, text: "" }), ModelsNotConfiguredError);
+		await assert.rejects(createExtractionPipeline({ chatStore, graphStore: ledgers, extractor: submitModel("submit_findings", NOTES_FINDINGS), auditor: submitModel("submit_review", NOTES_VERDICT), providerKeyMissing: () => providerKeyMissing("openai", ["cheap"]) }).importNotes(input), ProviderKeyMissingError);
+	});
+
+	it("isolates an ordinary failed chunk, reports partial, and keeps earlier/later merges and usage", async () => {
+		const ledgers = memoryLedgers();
+		let calls = 0;
+		const pipeline = createExtractionPipeline({
+			chatStore, graphStore: ledgers, getChunkTokens: () => 1,
+			engineFor: (role) => role === "auditor" ? submitModel("submit_review", NOTES_VERDICT) : fauxEngine([() => {
+				calls++;
+				if (calls === 2) throw new Error("synthetic failed chunk");
+				return fauxAssistantMessage([fauxToolCall("submit_findings", NOTES_FINDINGS as unknown as ToolCall["arguments"])], { stopReason: "toolUse" });
+			}]),
+		});
+		await assert.rejects(pipeline.importNotes({ ...input, text: "first chunk\nsecond chunk\nthird chunk" }), incomplete("partial", 2));
+		assert.equal(calls, 3);
+		assert.equal(ledgers.readNodes().length, 2);
+		assert.equal(ledgers.readSources()[0]!.extractions?.length, 3);
+	});
+
+	it("an abort after an earlier merge stops later chunks without losing graph or billed usage", async () => {
+		const ledgers = memoryLedgers();
+		let calls = 0;
+		const pipeline = createExtractionPipeline({
+			chatStore, graphStore: ledgers, getChunkTokens: () => 1,
+			engineFor: (role) => role === "auditor" ? submitModel("submit_review", NOTES_VERDICT) : submitModel("submit_findings", NOTES_FINDINGS, () => {
+				calls++;
+				if (calls === 2) abortExtraction(ledgers.readSources()[0]!.id);
+			}),
+		});
+		await assert.rejects(pipeline.importNotes({ ...input, text: "first chunk\nsecond chunk\nthird chunk" }), incomplete("aborted", 1));
+		assert.equal(calls, 2);
+		assert.equal(ledgers.readNodes().length, 1);
+		assert.equal(ledgers.readSources()[0]!.extractions?.length, 2);
+	});
+
+	for (const abortAt of [1, 2]) it(`abort in chunk ${abortAt} survives a usage-persistence error and stops later chunks`, async () => {
+		const ledgers = memoryLedgers();
+		let calls = 0;
+		let cancelled = false;
+		let usageFailures = 0;
+		const graphStore: GraphStore = { ...ledgers, appendSourceUsage: (id, entry) => {
+			if (cancelled) { usageFailures++; throw new Error("synthetic usage persistence failure during abort"); }
+			ledgers.appendSourceUsage(id, entry);
+		} };
+		const pipeline = createExtractionPipeline({
+			chatStore, graphStore, getChunkTokens: () => 1,
+			engineFor: (role) => role === "auditor" ? submitModel("submit_review", NOTES_VERDICT) : submitModel("submit_findings", NOTES_FINDINGS, () => {
+				calls++;
+				if (calls === abortAt) {
+					cancelled = true;
+					assert.equal(abortExtraction(ledgers.readSources()[0]!.id), true);
+				}
+			}),
+		});
+		const wholeFile = { ...input, text: "first chunk\nsecond chunk\nthird chunk" };
+		await assert.rejects(pipeline.importNotes(wholeFile), (error) => {
+			incomplete("aborted", abortAt - 1)(error);
+			assert.match((error as NotesImportError).message, /synthetic usage persistence failure during abort/);
+			return true;
+		});
+		assert.equal(calls, abortAt, "no later extractor runs with a fresh controller after cancellation");
+		assert.equal(usageFailures, 1, "the aborted chunk attempted to persist usage and surfaced its failure");
+		assert.equal(ledgers.readNodes().length, abortAt - 1, "earlier graph merges retained");
+		assert.equal(ledgers.readSources()[0]!.extractions?.length, abortAt - 1, "earlier usage retained");
+		assert.equal(extractionStatuses().length, 0, "cancelled job row removed");
+		assert.deepEqual(await make(ledgers).importNotes(wholeFile), { nodes: 1, chains: 0 }, "source exclusion released for an explicit unchanged whole-file retry");
+		assert.equal(ledgers.readSources()[0]!.extractions?.length, abortAt);
+	});
+
+	it("a usage-persistence error without an aborted signal remains an isolated failure and later chunks run", async () => {
+		const ledgers = memoryLedgers();
+		let calls = 0;
+		const graphStore: GraphStore = { ...ledgers, appendSourceUsage: (id, entry) => {
+			if (calls === 1) throw new Error("synthetic isolated usage failure");
+			ledgers.appendSourceUsage(id, entry);
+		} };
+		const pipeline = createExtractionPipeline({
+			chatStore, graphStore, getChunkTokens: () => 1,
+			engineFor: (role) => role === "auditor" ? submitModel("submit_review", NOTES_VERDICT) : submitModel("submit_findings", NOTES_FINDINGS, () => { calls++; }),
+		});
+		await assert.rejects(pipeline.importNotes({ ...input, text: "first chunk\nsecond chunk\nthird chunk" }), (error) => {
+			incomplete("partial", 3)(error);
+			assert.match((error as NotesImportError).message, /synthetic isolated usage failure/);
+			return true;
+		});
+		assert.equal(calls, 3, "ordinary cleanup failure does not imply cancellation");
+		assert.equal(ledgers.readNodes().length, 3);
+		assert.equal(ledgers.readSources()[0]!.extractions?.length, 2);
+	});
+
+	it("overlapping identical or different contents are busy BEFORE source metadata changes, across pipeline instances", async () => {
+		const ledgers = memoryLedgers();
+		let release!: () => void;
+		const gate = new Promise<void>((resolve) => { release = resolve; });
+		let upserts = 0;
+		const tracked = { ...ledgers, upsertSource: (source: NotesSource) => { upserts++; ledgers.upsertSource(source); } };
+		const first = make(tracked, gatedSubmitModel("submit_findings", NOTES_FINDINGS, gate)).importNotes(input);
+		const sourceBefore = structuredClone(ledgers.readSources());
+		try {
+			await assert.rejects(make(tracked).importNotes(input), incomplete("busy", 0));
+			await assert.rejects(make(tracked).importNotes({ ...input, text: "changed" }), incomplete("busy", 0));
+			assert.equal(upserts, 1, "busy calls cannot even attempt source metadata writes");
+			assert.deepEqual(ledgers.readSources(), sourceBefore);
+		} finally { release(); }
+		await first;
+		assert.deepEqual(await make(ledgers).importNotes(input), { nodes: 1, chains: 0 }, "lock released after lifecycle");
+		assert.equal(ledgers.readSources()[0]!.extractions?.length, 2);
+	});
+
+	it("a fulfilled zero-node chunk plus a failed chunk is partial, not failed or completed", async () => {
+		const ledgers = memoryLedgers();
+		let calls = 0;
+		const pipeline = createExtractionPipeline({
+			chatStore, graphStore: ledgers, getChunkTokens: () => 1,
+			engineFor: (role) => role === "auditor" ? submitModel("submit_review", NOTES_VERDICT) : fauxEngine([() => {
+				if (++calls === 2) throw new Error("synthetic failed chunk");
+				return fauxAssistantMessage([fauxToolCall("submit_findings", { propositions: [], chains: [] })], { stopReason: "toolUse" });
+			}]),
+		});
+		await assert.rejects(pipeline.importNotes({ ...input, text: "first chunk\nsecond chunk" }), incomplete("partial", 0));
+		assert.equal(ledgers.readSources()[0]!.extractions?.length, 2);
+	});
+
+	it("a merger failure after a node append is incomplete without rolling back that write", async () => {
+		const ledgers = memoryLedgers();
+		const broken = { ...ledgers, appendCheckpoint: () => { throw new Error("synthetic checkpoint failure after node append"); } };
+		await assert.rejects(make(broken).importNotes(input), incomplete("failed", 0));
+		assert.equal(ledgers.readNodes().length, 1, "already appended graph write retained even though merge never returned stats");
+		assert.equal(ledgers.readSources()[0]!.extractions?.length, 1);
+	});
+
+	for (const seam of ["layout", "usage"] as const) it(`a post-merge ${seam} failure is not false success and reports committed stats`, async () => {
+		const ledgers = memoryLedgers();
+		const originalUsage = ledgers.appendSourceUsage;
+		let failed = false;
+		const broken: GraphStore = { ...ledgers,
+			...(seam === "layout" ? { writePositions: () => { throw new Error("synthetic layout failure"); } } : {
+				appendSourceUsage: (id, entry) => { if (!failed) { failed = true; throw new Error("synthetic usage failure"); } originalUsage(id, entry); },
+			}),
+		};
+		await assert.rejects(make(broken).importNotes(input), incomplete("failed", 1));
+		assert.equal(ledgers.readNodes().length, 1);
+		assert.equal(ledgers.readSources()[0]!.extractions?.length, 1);
+		await make(ledgers).importNotes(input);
+	});
+
+	it("source-upsert failure is typed and releases exclusion for retry", async () => {
+		const ledgers = memoryLedgers();
+		await assert.rejects(make({ ...ledgers, upsertSource: () => { throw new Error("synthetic metadata failure"); } }).importNotes(input), incomplete("failed", 0));
+		await make(ledgers).importNotes(input);
+	});
+
+	for (const filePath of ["1.md", "1.1.md", "1 notes.md", "1.1 notes.md"]) it(`imports and repeats identical text for ${filePath}`, async () => {
+		const ledgers = memoryLedgers();
+		await make(ledgers).importNotes({ ...input, filePath });
+		await make(ledgers).importNotes({ ...input, filePath });
+		assert.equal(ledgers.readSources().length, 1);
+		assert.equal(ledgers.readSources()[0]!.extractions?.length, 2);
+		assert.equal(ledgers.readNodes().length, 2);
 	});
 });

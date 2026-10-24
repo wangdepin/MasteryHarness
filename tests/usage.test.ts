@@ -51,11 +51,11 @@ test("callCost: glm-5.3-flash math — fresh input, cached read, output", () => 
 test("callCost: cache writes bill at the cacheWrite rate", () => {
 	const cost = callCost(
 		call({ inputTokens: 1_000_000, outputTokens: 0, cacheWriteTokens: 500_000 }),
-		"anthropic:claude-sonnet-4-5",
+		"anthropic:claude-haiku-4-5",
 	);
 	assert.ok(cost !== null);
-	// fresh 1M @ $3/M + cache write 500k @ $3.75/M
-	assert.ok(Math.abs(cost! - (3 + 1.875)) < 1e-9);
+	// Native 1.4 catalog: fresh 1M @ $1/M + cache write 500k @ $1.25/M.
+	assert.ok(Math.abs(cost! - (1 + 0.625)) < 1e-9);
 });
 
 test("callCost: unknown model and absent fields are null, never zero", () => {

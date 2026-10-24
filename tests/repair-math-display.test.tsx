@@ -9,6 +9,8 @@ import { parseHTML } from "linkedom";
 import { validateToolArguments } from "@earendil-works/pi-ai";
 import { problemInputObject } from "../src/agent/tools/practice.ts";
 import { PracticeDock } from "../components/practice-dock.tsx";
+import { QuestionDock } from "../components/question-dock.tsx";
+import { LatexGlyph } from "../components/latex-glyph.tsx";
 import { ProblemCard, ConcludeCard } from "../components/practice-cards.tsx";
 import { MessageResponse } from "../components/ai-elements/message.tsx";
 import {
@@ -74,6 +76,52 @@ describe("repairMathForDisplay — the existing composition, unchanged", () => {
 		assert.equal(repairMathForDisplay(quadrupled), clean);
 		assert.equal(repairMathForDisplay(debris), `$${repairedDebris}$`);
 		assert.equal(repairMathForDisplay(matrix), `$$\n${repairedMatrix}\n$$`);
+	});
+});
+
+describe("upgraded KaTeX rendering on real question and practice surfaces", () => {
+	for (const [name, formula, glyphs] of [
+		["fraction and root", String.raw`\frac{1}{\sqrt{x}}`, ["1", "x"]],
+		["accents", String.raw`\hat{x}+\bar{y}`, ["x", "y"]],
+		["sum", String.raw`\sum_{i=1}^{n}i`, ["∑", "i", "n"]],
+		["matrix rows", String.raw`\begin{pmatrix}1&2\\3&4\end{pmatrix}`, ["1", "2", "3", "4"]],
+		["aligned rows", String.raw`\begin{aligned}a&=b\\ c&=d\end{aligned}`, ["a", "b", "c", "d", "="]],
+	] as const) {
+		it(`${name}: dollar and legacy delimiters preserve glyphs and copied TeX`, () => {
+			for (const raw of [`$${formula}$`, `\\(${formula}\\)`, `$$\n${formula}\n$$`, `\\[\n${formula}\n\\]`]) {
+				for (const element of [
+					<MessageResponse mode="static">{raw}</MessageResponse>,
+					<QuestionDock toolName="ask_user_question" toolCallId="security_question" input={{ question: raw }} expanded onExpand={() => {}} onSubmit={() => {}} />,
+					dock({ statement: raw }),
+				]) {
+					const html = renderToStaticMarkup(element);
+					assertMath(html, [formula], [...glyphs]);
+					const { document } = parseHTML(html);
+					assert.ok(document.querySelector(".katex-base .katex-strut"), "matching 0.18 internal layout classes");
+					if (name === "fraction and root") assert.ok(document.querySelector(".mfrac .sqrt"));
+					if (name === "accents") assert.ok(document.querySelectorAll(".katex-accent").length >= 2);
+					if (name.endsWith("rows")) assert.ok(document.querySelectorAll(".mtable .mtr").length >= 2 || document.querySelectorAll(".mtable .vlist > span").length >= 2, "two real rows, not repaired-away slashes");
+				}
+			}
+		});
+	}
+	it("preserves escaped currency and code on both dock surfaces", () => {
+		const raw = "Costs \\$5 and \\$10. `" + clean + "`\n\n```text\n" + doubled + "\n```";
+		for (const element of [dock({ statement: raw }), <QuestionDock toolName="ask_user_question" toolCallId="security_code" input={{ question: raw }} expanded onExpand={() => {}} onSubmit={() => {}} />]) {
+			const html = renderToStaticMarkup(element);
+			assert.deepEqual(math(html).annotations, []);
+			assert.ok(parseHTML(html).document.firstElementChild?.textContent?.includes("$5 and $10"));
+			assert.ok(parseHTML(html).document.querySelector("code")?.textContent?.includes(clean));
+		}
+	});
+	it("renders direct LatexGlyph connectors through the upgraded root", () => {
+		for (const [command, glyph] of [[String.raw`\Rightarrow`, "⇒"], [String.raw`\land`, "∧"], [String.raw`\neg`, "¬"]]) {
+			const html = renderToStaticMarkup(<LatexGlyph cmd={command!} />);
+			const { document } = parseHTML(html);
+			assert.equal(document.querySelectorAll(".katex-error").length, 0);
+			assert.ok(document.querySelector(".katex-base .katex-strut"));
+			assert.ok(document.querySelector(".katex-html")?.textContent?.includes(glyph!));
+		}
 	});
 });
 

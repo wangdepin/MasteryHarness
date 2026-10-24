@@ -4,7 +4,7 @@ import { invalidInputResult, questionResult } from "./tool-execute.ts";
 import { providerEventObserver } from "./provider-events.ts";
 import type { Usage } from "@earendil-works/pi-ai";
 import { PATHS } from "../../config.ts";
-import { piEngineFor, type PiEngine } from "./models.ts";
+import { APP_IDENTITY, piEngineFor, type PiEngine } from "./models.ts";
 import { effectivePromptSegments } from "./prompt-segments.ts";
 import {
 	askUserQuestionTool,
@@ -116,7 +116,9 @@ export interface AgentBuildOptions {
 	 *  fresh per turn, honoring enabled overrides (switch on + file
 	 *  exists); absent → the cached pure-source composition. */
 	promptSwitches?: Record<string, boolean>;
-	/** Debug: when set AND LH_PROVIDER_EVENTS=1, raw provider stream events
+	/** Native conversation identity: the existing persisted chat id, reused
+	 * across reconstructed prober, teacher, and practice Agents.
+	 * Debug: when set AND LH_PROVIDER_EVENTS=1, raw provider stream events
 	 *  (pre-normalization) append to data/debug/provider-events/
 	 *  <chatId>.jsonl via providerEventObserver — the GLM-truncation /
 	 *  DeepSeek-id incident layer. Absent or env-off → no observer. */
@@ -177,6 +179,8 @@ function baseAgentOptions(kind: AgentKind, opts: AgentBuildOptions, tools: Agent
 	// the normal no-observer path (tests, env-off).
 	const providerEvents = opts.chatId ? providerEventObserver(opts.chatId, kind) : undefined;
 	const agent = new Agent({
+		identity: APP_IDENTITY,
+		sessionId: opts.chatId,
 		initialState: {
 			systemPrompt,
 			model: engine.model,

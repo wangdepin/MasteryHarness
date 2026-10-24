@@ -22,6 +22,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ListTreeIcon, UploadIcon } from "lucide-react";
 import { ChainTableOverlay } from "@/components/chain-table.tsx";
 import { GraphCostControl } from "@/components/graph-view.tsx";
+import { NotesImportErrors, useNotesImport } from "@/components/notes-import.tsx";
 import { Hint } from "@/components/ui/hint";
 import type { ChatSummary, GraphCostSummary, GraphSnapshot } from "@/src/core";
 
@@ -96,7 +97,6 @@ export function MinimalHome({
 	const [costs, setCosts] = useState<GraphCostSummary | null>(null);
 	const [chats, setChats] = useState<ChatSummary[]>([]);
 	const [chainsOpen, setChainsOpen] = useState(false);
-	const [importing, setImporting] = useState(false);
 	const fileInputRef = useRef<HTMLInputElement>(null);
 
 	const readState = useCallback(() => {
@@ -123,25 +123,9 @@ export function MinimalHome({
 		if (chainSelectOpen) setChainsOpen(true);
 	}, [chainSelectOpen]);
 
-	// Notes import — the same front door as the graph home: POST awaits
-	// the whole pipeline server-side, then one refetch lands the numbers.
-	const onImportFiles = (files: FileList | null) => {
-		if (!files || files.length === 0) return;
-		setImporting(true);
-		const form = new FormData();
-		for (const file of Array.from(files)) form.append("files", file);
-		fetch("/api/graph/import", { method: "POST", body: form })
-			.then(async (res) => {
-				const body = (await res.json()) as { results: { filePath: string; ok: boolean }[] };
-				const failed = body.results.filter((r) => !r.ok);
-				if (failed.length > 0) console.error("notes import failed for:", failed);
-			})
-			.catch((err) => console.error("import failed:", err))
-			.finally(() => {
-				setImporting(false);
-				readState();
-			});
-	};
+	// Refetch even after incomplete imports: earlier writes and spend remain.
+	const notesImport = useNotesImport({ onFinish: readState });
+	const { importing, onImportFiles } = notesImport;
 
 	const teachSessions = chats.filter((c) => c.kind === "teach").length;
 	const practiceSessions = chats.filter((c) => c.kind === "practice").length;
@@ -210,6 +194,7 @@ export function MinimalHome({
 						</Hint>
 					</div>
 				</div>
+				<NotesImportErrors errors={notesImport.errors} />
 				{costs && costs.runs.length > 0 && <GraphCostControl costs={costs} />}
 			</div>
 

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { AssistantMessage, Message, Tool, ToolResultMessage, Usage } from "@earendil-works/pi-ai";
 import { normalizeContext } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
@@ -142,6 +143,7 @@ export async function runVisualMaker(input: VisualMakerInput, opts: VisualMakerO
 	// BYOK (owner, 2026-09-22): the level rides the injected engine — no
 	// factory pin to consult (engine.level is the resolved/clamped value).
 	const reasoning = engine.level;
+	const sessionId = randomUUID();
 	const prompt = [
 		"Brief for ONE precise figure (from the teacher, verbatim — it is everything you know):",
 		brief,
@@ -164,6 +166,7 @@ export async function runVisualMaker(input: VisualMakerInput, opts: VisualMakerO
 				INSTRUCTIONS,
 				messages,
 				toolDeclarations,
+				sessionId,
 				reasoning,
 				opts.abortSignal,
 				opts.chatId ? providerEventObserver(opts.chatId, "job:visualMaker") : undefined,
@@ -317,6 +320,7 @@ async function streamOnce(
 	systemPrompt: string,
 	messages: Message[],
 	tools: Tool[],
+	sessionId: string,
 	reasoning: ThinkingLevel | undefined,
 	abortSignal?: AbortSignal,
 	onProviderStreamEvent?: ProviderEventObserver,
@@ -325,8 +329,8 @@ async function streamOnce(
 	// and tool declarations fold into a leading system message.
 	// normalizeContext is the library's only Context→TranscriptContext entry.
 	const stream = engine.streamFn(engine.model, normalizeContext({ systemPrompt, messages, tools }), {
+		sessionId,
 		reasoning: reasoning && reasoning !== "off" ? reasoning : undefined,
-		apiKey: process.env.OPENROUTER_API_KEY || undefined,
 		signal: abortSignal,
 		onProviderStreamEvent: onProviderStreamEvent as never,
 	} as never);

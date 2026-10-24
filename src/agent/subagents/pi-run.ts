@@ -1,6 +1,7 @@
 import { Agent, type AgentEvent, type AgentMessage, type AgentTool } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage, ToolResultMessage, Usage } from "@earendil-works/pi-ai";
-import { piEngineFor, type PiEngine } from "../models.ts";
+import { randomUUID } from "node:crypto";
+import { APP_IDENTITY, piEngineFor, type PiEngine } from "../models.ts";
 import { providerEventObserver } from "../provider-events.ts";
 import type { ModelRole } from "../../../config.ts";
 
@@ -64,6 +65,9 @@ export async function runSubagent(tools: AgentTool<any, any>[], opts: SubagentRu
 	// Debug recorder (owner, 2026-10-04): raw provider events per job run.
 	const providerEvents = opts.chatId ? providerEventObserver(opts.chatId, `job:${opts.role}`) : undefined;
 	const agent = new Agent({
+		identity: APP_IDENTITY,
+		// One unsaved conversation per invocation, stable through every turn.
+		sessionId: randomUUID(),
 		initialState: {
 			systemPrompt: opts.systemPrompt,
 			model: engine.model,
