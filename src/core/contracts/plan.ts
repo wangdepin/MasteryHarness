@@ -74,6 +74,15 @@ export interface DerivedPlanStatuses {
 	visited: ReadonlySet<string>;
 }
 
+/** How much of a session's plan the learner has learned (owner, 2026-10-25):
+ *  `done` of `total` nodes have a PASSED graded check. Derived, never stored —
+ *  and a separate view from the position statuses above, which stay
+ *  results-blind (core/plan-progress.ts derivePlanProgressLh). */
+export interface PlanProgress {
+	done: number;
+	total: number;
+}
+
 /** Statuses of a node: the derived view the plan panel should render. */
 export function derivedNodeStatus(statuses: DerivedPlanStatuses, nodeId: string): PlanNodeStatus {
 	if (statuses.current === nodeId) return "current";

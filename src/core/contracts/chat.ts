@@ -8,7 +8,7 @@
 import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 import type { LhMessage } from "../native-messages.ts";
 import type { Phase3 } from "../phases.ts";
-import type { PlanNodeStatus, PlanTree } from "./plan.ts";
+import type { PlanNodeStatus, PlanProgress, PlanTree } from "./plan.ts";
 import type { EmissionStats } from "./graph.ts";
 
 // ─── Chat records (the session store's on-disk format) ───────────────────────
@@ -265,6 +265,9 @@ export interface ChatSummary {
 	phase: Phase3;
 	/** An unanswered quiz/ask question is waiting for the learner. */
 	pendingQuestion: boolean;
+	/** How much of the session's plan is learned (derived, never stored);
+	 *  null while there is no plan, and always null on practice sessions. */
+	progress: PlanProgress | null;
 	/** Practice sessions (2026-10-04): a posed problem with no conclude —
 	 *  the sidebar meta's "Problem waiting". Absent on teaching sessions. */
 	pendingProblem: boolean;

@@ -10,6 +10,7 @@ import { DumbbellIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PlusIcon, SearchIc
 import { ActivitySection } from "@/components/activity-dock";
 import { CoverageMenuBlock } from "@/components/extraction-coverage";
 import { LhMark } from "@/components/lh-mark";
+import { ProgressRing } from "@/components/progress-ring";
 import { ReviewNavRow } from "@/components/review-nav-row";
 import { BrailleSpinner } from "@/components/braille-spinner";
 import { KeyboardShortcuts } from "@/components/keyboard-shortcuts";
@@ -261,7 +262,7 @@ function sessionMeta(chat: ChatListItem): string {
 
 /**
  * One session row: the status spinner (only while working), then title +
- * state-aware meta. Exported for render tests — pure function of the
+ * state-aware meta, then the plan-progress ring on the far right. Exported for render tests — pure function of the
  * list item.
  */
 export function SessionRow({
@@ -305,6 +306,7 @@ export function SessionRow({
 			{/* The dumbbell rides the FAR RIGHT (owner round 6, 2026-10-05) —
 			    was left of the name; right-aligned keeps the titles flush with
 			    the teaching rows and reads cleaner. */}
+			{chat.progress && <ProgressRing done={chat.progress.done} total={chat.progress.total} />}
 			{(chat.kind ?? "teach") === "practice" && (
 				<DumbbellIcon className="size-3.5 shrink-0 text-muted-foreground/70" aria-label="Practice session" />
 			)}
