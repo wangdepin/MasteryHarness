@@ -48,6 +48,9 @@ function interactionFor(session: Session): AuthInteraction & { signal: AbortSign
 			}
 		},
 		prompt(prompt: AuthPrompt) {
+			// Copilot asks for a GitHub Enterprise domain first. Owner scope
+			// (2026-10-25): github.com only, so blank is the one answer.
+			if (prompt.type === "text" && view.provider === "github-copilot") return Promise.resolve("");
 			if (prompt.type !== "manual_code") return Promise.reject(new Error(`unsupported login prompt: ${prompt.type}`));
 			return new Promise<string>((resolve, reject) => {
 				view.status = "awaiting_code";

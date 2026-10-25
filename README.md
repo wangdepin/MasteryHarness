@@ -14,7 +14,7 @@
 
 MasteryHarness uses AI agents to plan and teach lessons from your current understanding to your goal. It builds a detailed picture of what you understand and how you reason, and updates it as you learn. Teaching builds understanding one reasoning step at a time, practice makes it usable, and a persistent knowledge graph carries it across sessions.
 
-**Bring your own model access, two ways.** Paste an API key for any of many providers (OpenAI, Anthropic, Google Gemini, DeepSeek, OpenRouter, and more), or skip the key and **sign in with an existing ChatGPT, Claude, or Google (Gemini) subscription**. Nothing goes through a MasteryHarness server; the app talks to your provider directly.
+**Bring your own model access, two ways.** Paste an API key for any of many providers (OpenAI, Anthropic, Google Gemini, DeepSeek, OpenRouter, and more), or skip the key and **sign in with an existing ChatGPT, Claude, GitHub Copilot, Grok, or Google (Gemini) subscription**. Nothing goes through a MasteryHarness server; the app talks to your provider directly.
 
 ![Teaching session](docs/assets/teaching-session.png)
 
@@ -22,7 +22,7 @@ MasteryHarness uses AI agents to plan and teach lessons from your current unders
 
 - **Review: spaced repetition for what you have learned.** A Review page in the sidebar lists the propositions whose recall is due, scheduled by FSRS-6 from your practice results. Pick some, start a review, and the next practice session is built around them. [Details below](#review).
 - **Code exercises.** The teacher can pose a Python exercise in the dock: you write code, run it in the app (a bundled Pyodide runtime, no network needed), and submit only after running the current code. A "Your thinking" field carries your reasoning to the teacher.
-- **Sign in with ChatGPT or Google instead of an API key.** Use your ChatGPT, Claude, or Google subscription. Google sign-in goes through Antigravity, which offers Gemini, Claude, and GPT-OSS models; its models appear in the picker once you are signed in.
+- **Sign in with a subscription instead of an API key.** Use your ChatGPT, Claude, GitHub Copilot, Grok, or Google subscription. Copilot shows only the models your plan includes (github.com accounts; GitHub Enterprise is not supported). Google sign-in goes through Antigravity, which offers Gemini, Claude, and GPT-OSS models; its models appear in the picker once you are signed in.
 - **Sentence reader.** Read teaching text sentence by sentence, with optional read-aloud through ElevenLabs.
 - **Quote while you read.** Selecting teaching prose quotes it into "Thinking while reading" automatically, including in prediction questions.
 - **Light theme.** A light theme and a System mode in appearance settings. The plan map follows the theme.
@@ -89,7 +89,7 @@ Want the official app? Download LearnHarness from [learnharness.ai](https://lear
 
 ## Your keys, your data
 
-- **Your keys and models.** No subscription or markup. Add an API key and pay your provider for usage, or sign in with an existing ChatGPT, Claude, or Google subscription. Both are set up in Settings.
+- **Your keys and models.** No subscription or markup. Add an API key and pay your provider for usage, or sign in with an existing ChatGPT, Claude, GitHub Copilot, Grok, or Google subscription. Both are set up in Settings.
 - **Local storage.** Your chats, graph, settings, and credentials live on your machine. Learning records are plain files you can inspect.
 - **External services.** Models run through your configured providers. Model requests send the context needed for the task; web research, dictation, and read-aloud also contact external services. Local storage does not mean offline processing.
 - **Inspectable behavior.** System prompts are visible and editable.

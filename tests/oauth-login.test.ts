@@ -12,7 +12,10 @@ const oauth = (access: string) => ({ type: "oauth" as const, access, refresh: "r
 describe("request parsing", () => {
 	it("start accepts only the offered providers", () => {
 		assert.deepEqual(parseStartBody({ provider: "anthropic" }), { ok: true, value: { provider: "anthropic" } });
-		for (const body of [null, [], {}, { provider: "github-copilot" }, { provider: 7 }]) {
+		for (const id of ["github-copilot", "xai"]) {
+			assert.deepEqual(parseStartBody({ provider: id }), { ok: true, value: { provider: id } });
+		}
+		for (const body of [null, [], {}, { provider: "amazon-bedrock" }, { provider: 7 }]) {
 			assert.equal(parseStartBody(body).ok, false, JSON.stringify(body));
 		}
 	});

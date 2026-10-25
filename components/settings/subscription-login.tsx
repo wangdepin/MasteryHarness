@@ -2,7 +2,7 @@
 
 /**
  * "Subscription sign-in" group of the Keys section (owner, 2026-10-21): use
- * a ChatGPT or Claude plan instead of an API key. Sign in opens the
+ * a ChatGPT, Claude, GitHub Copilot, Grok or Google plan instead of an API key. Sign in opens the
  * provider's page in the browser; flows that cannot reach the local
  * callback ask for the authorization code pasted back. The server holds the
  * tokens — this component only ever sees status.

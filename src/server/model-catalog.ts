@@ -22,7 +22,7 @@ import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 import { piModels } from "../agent/models.ts";
 import { settingsStore } from "../store/settings.ts";
 import { effectiveSettings } from "./stores.ts";
-import { hasOAuthCredential } from "../store/oauth-credentials.ts";
+import { hasOAuthCredential, readOAuthCredential } from "../store/oauth-credentials.ts";
 import { keyValue } from "./keys.ts";
 import type { ChatSettings } from "../core/contracts/chat.ts";
 import type {
@@ -145,6 +145,17 @@ function keyedProviderIds(): Set<string> {
 	return new Set(catalogProviders().filter((p) => p.keyPresent).map((p) => p.id));
 }
 
+/** One provider's models for the picker. A subscription that entitles only
+ *  some models (GitHub Copilot) lists exactly those, as pi-ai's own
+ *  `filterModels` decides from the stored sign-in; every other provider
+ *  lists its whole catalog. `file` is the credentials file (tests). */
+export function providerModels(providerId: string, file?: string): readonly Model<Api>[] {
+	const models = piModels().getModels(providerId);
+	const provider = piModels().getProvider(providerId);
+	const credential = readOAuthCredential(providerId, file);
+	return provider?.filterModels && credential ? provider.filterModels(models, credential) : models;
+}
+
 /** Project one catalog model to the client DTO. */
 export function toModelDto(model: Model<Api>): ModelDto {
 	return {
@@ -177,7 +188,7 @@ export function catalogContextLimits(): Map<string, number> {
 	const index = new Map<string, number>();
 	for (const provider of piModels().getProviders()) {
 		if (!keyed.has(provider.id)) continue;
-		for (const model of piModels().getModels(provider.id)) {
+		for (const model of providerModels(provider.id)) {
 			index.set(`${provider.id}:${model.id}`, model.contextWindow);
 		}
 	}
@@ -193,7 +204,7 @@ export function modelCatalog(): ModelCatalogResponse {
 	const models = piModels()
 		.getProviders()
 		.filter((p) => keyed.has(p.id))
-		.flatMap((p) => piModels().getModels(p.id))
+		.flatMap((p) => providerModels(p.id))
 		.map(toModelDto)
 		.sort((a, b) => (a.provider === b.provider ? a.id.localeCompare(b.id) : a.provider.localeCompare(b.provider)));
 	return {
