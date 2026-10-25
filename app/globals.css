@@ -271,6 +271,15 @@ body {
    floor (~20px, as close to the glyphs as Chromium will draw it) while
    wrapped lines in growing textareas still read fine. Rendered prose keeps
    1.5 — the two share family and size, they differ only in leading. */
+/* Highlighted code (components/highlighted-code.tsx): one color per theme,
+   both carried on the span as custom properties by the highlighter. */
+.lh-tok {
+	color: var(--tok-light);
+}
+.dark .lh-tok {
+	color: var(--tok-dark, var(--tok-light));
+}
+
 .lh-input {
 	font-family: var(--font-prose);
 	font-size: var(--lh-prose-size);

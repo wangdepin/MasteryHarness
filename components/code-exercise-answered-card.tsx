@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { CheckIcon, XIcon } from "lucide-react";
 import { MessageResponse } from "@/components/ai-elements/message";
+import { HighlightedCode } from "@/components/highlighted-code";
 import { ThinkingBlock } from "@/components/thinking-block";
 import { cn } from "@/lib/utils";
 import { restoreLiteralNewlines, type CodeExerciseAnswerData } from "@/src/core";
@@ -37,7 +38,7 @@ export function CodeExerciseAnsweredCard({ answer }: { answer: CodeExerciseAnswe
 				data-testid="code-answered-code"
 				className="max-h-80 overflow-auto rounded-lg bg-muted/50 p-3 font-mono text-sm"
 			>
-				{answer.code}
+				<HighlightedCode code={answer.code} />
 			</pre>
 			{lastRun?.stdout && (
 				<pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-muted/50 p-3 font-mono text-sm">

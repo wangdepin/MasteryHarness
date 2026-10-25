@@ -71,4 +71,28 @@ describe("CodeExerciseDock first paint", () => {
 	it("says why Submit is closed while compaction runs", () => {
 		assert.match(render({ compactionRunning: true }), /compacting session…/);
 	});
+
+	it("lays a hidden highlight layer under a transparent editor, both spelling the code", () => {
+		const html = render();
+		const layer = /<pre[^>]*data-testid="code-highlight"[^>]*>([\s\S]*?)<\/pre>/.exec(html);
+		assert.ok(layer, "the highlight layer renders");
+		assert.match(layer[0], /aria-hidden="true"/);
+		assert.match(layer[0], /pointer-events-none/);
+		assert.match(layer[1]!, /nums = \[10, 20, 30\]\nsquares = \[\]/);
+		const editor = /<textarea[^>]*data-testid="code-editor"[^>]*>/.exec(html)![0];
+		assert.match(editor, /text-transparent/);
+		assert.match(editor, /caret-foreground/);
+	});
+
+	it("keeps the layer's metrics identical to the editor's, so the colors sit on the letters", () => {
+		const html = render();
+		const layer = /<pre[^>]*data-testid="code-highlight"[^>]*class="([^"]*)"|<pre[^>]*class="([^"]*)"[^>]*data-testid="code-highlight"/.exec(html)!;
+		const editor = /<textarea[^>]*class="([^"]*)"[^>]*data-testid="code-editor"|<textarea[^>]*data-testid="code-editor"[^>]*class="([^"]*)"/.exec(html)!;
+		const layerClass = layer[1] ?? layer[2]!;
+		const editorClass = editor[1] ?? editor[2]!;
+		for (const shared of ["px-2.5", "py-2", "font-mono", "text-sm", "leading-relaxed"]) {
+			assert.ok(layerClass.split(" ").includes(shared), `layer has ${shared}`);
+			assert.ok(editorClass.split(" ").includes(shared), `editor has ${shared}`);
+		}
+	});
 });

@@ -5,6 +5,7 @@ import { CheckIcon, PlayIcon, XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MessageResponse } from "@/components/ai-elements/message";
 import { BrailleSpinner } from "@/components/braille-spinner";
+import { HighlightedCode } from "@/components/highlighted-code";
 import { finishDictation, isDictationActive, joinDictation, useDictationTarget } from "@/components/dictation";
 import { appendQuote, QUOTE_EVENT } from "@/components/quote-selection-dom";
 import { cn } from "@/lib/utils";
@@ -81,6 +82,12 @@ export function CodeExerciseDock({ input, runtime, onSubmit, compactionRunning =
 	const graded = input.tests !== undefined;
 	const submittable = canSubmit(state) && !compactionRunning;
 	const editorRef = useRef<HTMLTextAreaElement>(null);
+	// The highlight layer sits under the transparent textarea and is moved,
+	// not scrolled, to follow it — the textarea owns the scrolling.
+	const highlightRef = useRef<HTMLDivElement>(null);
+	const syncHighlightScroll = (editor: HTMLTextAreaElement): void => {
+		if (highlightRef.current) highlightRef.current.style.transform = `translate(${-editor.scrollLeft}px, ${-editor.scrollTop}px)`;
+	};
 	// Where the caret goes after the next render: React rewrites the textarea's
 	// value on every controlled change, which parks the caret at the end.
 	const pendingCaret = useRef<number | null>(null);
@@ -141,20 +148,32 @@ export function CodeExerciseDock({ input, runtime, onSubmit, compactionRunning =
 					<div className="px-2.5 pt-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
 						Your code
 					</div>
-					<textarea
-						ref={editorRef}
-						data-testid="code-editor"
-						aria-label="Your code"
-						value={state.code}
-						onChange={(event) => dispatch({ type: "edit", code: event.target.value })}
-						onKeyDown={onEditorKeyDown}
-						spellCheck={false}
-						autoCapitalize="off"
-						autoCorrect="off"
-						wrap="off"
-						rows={1}
-						className="field-sizing-content min-h-32 max-h-80 w-full resize-none overflow-auto whitespace-pre bg-transparent px-2.5 py-2 font-mono text-sm leading-relaxed outline-none"
-					/>
+					<div className="relative">
+						<pre
+							aria-hidden
+							data-testid="code-highlight"
+							className="pointer-events-none absolute inset-0 overflow-hidden px-2.5 py-2 font-mono text-sm leading-relaxed"
+						>
+							<span ref={highlightRef} className="block whitespace-pre">
+								<HighlightedCode code={state.code} />
+							</span>
+						</pre>
+						<textarea
+							ref={editorRef}
+							data-testid="code-editor"
+							aria-label="Your code"
+							value={state.code}
+							onChange={(event) => dispatch({ type: "edit", code: event.target.value })}
+							onKeyDown={onEditorKeyDown}
+							onScroll={(event) => syncHighlightScroll(event.currentTarget)}
+							spellCheck={false}
+							autoCapitalize="off"
+							autoCorrect="off"
+							wrap="off"
+							rows={1}
+							className="relative block field-sizing-content min-h-32 max-h-80 w-full resize-none overflow-auto whitespace-pre bg-transparent px-2.5 py-2 font-mono text-sm leading-relaxed text-transparent caret-foreground outline-none"
+						/>
+					</div>
 				</div>
 
 				<div className="flex items-center gap-3 py-2">

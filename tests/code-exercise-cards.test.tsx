@@ -65,6 +65,13 @@ describe("CodeExerciseAnsweredCard", () => {
 		assert.match(html, /done/);
 	});
 
+	it("keeps the submitted code verbatim inside its code box, ready to be colored", () => {
+		const html = card({ ...ran, passed: true });
+		const box = /<pre[^>]*data-testid="code-answered-code"[^>]*>([\s\S]*?)<\/pre>/.exec(html);
+		assert.ok(box, "the code box renders");
+		assert.equal(box[1]!.replace(/<[^>]+>/g, ""), "squares = [1, 4]");
+	});
+
 	it("shows a failed check and its traceback", () => {
 		const html = card({ ...ran, passed: false, error: "AssertionError" });
 		assert.match(html, /Checks failed/);
