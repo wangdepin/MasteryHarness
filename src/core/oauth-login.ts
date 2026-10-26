@@ -4,17 +4,14 @@
  * /api/auth/oauth routes. No I/O.
  */
 
-/** Providers offered for subscription sign-in (owner scope: Claude,
- *  GitHub Copilot and Grok through pi-ai's own login flows, plus Google
- *  Antigravity through the vendored provider in src/agent/providers/antigravity). */
+/** Providers offered for subscription sign-in (owner scope: Claude through pi-ai's own
+ *  login flow, plus Google Antigravity through the vendored provider in src/agent/providers/antigravity). */
 export const SUBSCRIPTION_PROVIDERS: readonly { id: string; label: string }[] = [
 	{ id: "anthropic", label: "Claude" },
 	{ id: "antigravity", label: "Google (Antigravity)" },
-	{ id: "github-copilot", label: "GitHub Copilot" },
-	{ id: "xai", label: "Grok" },
 ];
 
-export function isSubscriptionProvider(id: unknown): id is string {
+export function isOAuthSignInProvider(id: unknown): id is string {
 	return typeof id === "string" && SUBSCRIPTION_PROVIDERS.some((p) => p.id === id);
 }
 
@@ -28,19 +25,10 @@ export interface OAuthLoginView {
 	/** The page to open in the browser (present from `awaiting_browser`). */
 	authUrl?: string;
 	instructions?: string;
-	/** Device-code flows: the code to type on `verificationUri`. */
-	deviceCode?: { userCode: string; verificationUri: string };
 	/** Set while `awaiting_code`: what to paste. */
 	codePrompt?: string;
 	message?: string;
 	error?: string;
-}
-
-/** The page the user must visit to finish the login: the provider's
- *  authorization page, or — for device-code flows (Copilot, Grok) — the page
- *  where the code is typed. */
-export function loginPageUrl(view: OAuthLoginView): string | undefined {
-	return view.authUrl ?? view.deviceCode?.verificationUri;
 }
 
 /** One provider row of GET /api/auth/oauth. */
@@ -61,7 +49,7 @@ function record(body: unknown): Record<string, unknown> | null {
 /** POST /api/auth/oauth/start body. */
 export function parseStartBody(body: unknown): OAuthBodyResult<{ provider: string }> {
 	const raw = record(body);
-	if (!raw || !isSubscriptionProvider(raw.provider)) {
+	if (!raw || !isOAuthSignInProvider(raw.provider)) {
 		return { ok: false, error: `provider must be one of: ${SUBSCRIPTION_PROVIDERS.map((p) => p.id).join(", ")}` };
 	}
 	return { ok: true, value: { provider: raw.provider } };

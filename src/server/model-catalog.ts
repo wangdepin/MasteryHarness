@@ -21,17 +21,22 @@ import { clampThinkingLevel, getSupportedThinkingLevels, type Api, type Model } 
 import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 import { piModels } from "../agent/models.ts";
 import { chatGPTConnected, chatGPTModel, chatGPTModels, refreshChatGPTModels } from "../agent/chatgpt-bridge.ts";
+import { NATIVE_SUBSCRIPTIONS } from "../core/contracts/subscriptions.ts";
+import { nativeSubscriptionId, nativeSubscriptionConnected, nativeSubscriptionModel, nativeSubscriptionModels, refreshSubscriptionModels } from "../agent/subscription-bridge.ts";
 
-export async function refreshConnectionCatalog(): Promise<void> {
-	await refreshChatGPTModels(piModels().getModels("openai").filter((m): m is Model<"openai-responses"> => m.api === "openai-responses"));
+export async function refreshConnectionCatalog(provider?: string): Promise<void> {
+	await Promise.all([
+		!provider || provider === "chatgpt" ? refreshChatGPTModels(piModels().getModels("openai").filter((m): m is Model<"openai-responses"> => m.api === "openai-responses")) : Promise.resolve(),
+		!provider || nativeSubscriptionId(provider) ? refreshSubscriptionModels() : Promise.resolve(),
+	]);
 }
 function connectionModel(provider: string, id: string): Model<Api> | undefined {
-	return provider === "chatgpt" ? chatGPTModel(id) : piModels().getModel(provider, id);
+	return provider === "chatgpt" ? chatGPTModel(id) : nativeSubscriptionId(provider) ? nativeSubscriptionModel(provider, id) : piModels().getModel(provider, id);
 }
-function connectionProviderIds(): string[] { return [...piModels().getProviders().map((p) => p.id), "chatgpt"]; }
+function connectionProviderIds(): string[] { return [...piModels().getProviders().map((p) => p.id), "chatgpt", ...NATIVE_SUBSCRIPTIONS.map((p) => p.logicalId)]; }
 import { settingsStore } from "../store/settings.ts";
 import { effectiveSettings } from "./stores.ts";
-import { hasOAuthCredential, readOAuthCredential } from "../store/oauth-credentials.ts";
+import { hasOAuthCredential } from "../store/oauth-credentials.ts";
 import { keyValue } from "./keys.ts";
 import type { ChatSettings } from "../core/contracts/chat.ts";
 import type {
@@ -144,7 +149,12 @@ export function catalogProviders(): CatalogProvider[] {
 		envVar: "",
 		keyPresent: hasOAuthCredential(s.id),
 	}));
-	return [...keyed, ...signInOnly, { id: "chatgpt", envVar: "", keyPresent: chatGPTConnected() }].sort((a, b) => a.id.localeCompare(b.id));
+	return [
+		...keyed,
+		...signInOnly,
+		{ id: "chatgpt", envVar: "", keyPresent: chatGPTConnected() },
+		...NATIVE_SUBSCRIPTIONS.map((p) => ({ id: p.logicalId, envVar: "", keyPresent: nativeSubscriptionConnected(p.providerId) })),
+	].sort((a, b) => a.id.localeCompare(b.id));
 }
 
 /** The providers whose key is present — the picker federates exactly
@@ -152,17 +162,6 @@ export function catalogProviders(): CatalogProvider[] {
  *  Keys page is the discovery surface, same discipline as search). */
 function keyedProviderIds(): Set<string> {
 	return new Set(catalogProviders().filter((p) => p.keyPresent).map((p) => p.id));
-}
-
-/** One provider's models for the picker. A subscription that entitles only
- *  some models (GitHub Copilot) lists exactly those, as pi-ai's own
- *  `filterModels` decides from the stored sign-in; every other provider
- *  lists its whole catalog. `file` is the credentials file (tests). */
-export function providerModels(providerId: string, file?: string): readonly Model<Api>[] {
-	const models = piModels().getModels(providerId);
-	const provider = piModels().getProvider(providerId);
-	const credential = readOAuthCredential(providerId, file);
-	return provider?.filterModels && credential ? provider.filterModels(models, credential) : models;
 }
 
 /** Project one catalog model to the client DTO. */
@@ -197,11 +196,11 @@ export function catalogContextLimits(): Map<string, number> {
 	const index = new Map<string, number>();
 	for (const provider of piModels().getProviders()) {
 		if (!keyed.has(provider.id)) continue;
-		for (const model of providerModels(provider.id)) {
+		for (const model of piModels().getModels(provider.id)) {
 			index.set(`${provider.id}:${model.id}`, model.contextWindow);
 		}
 	}
-	for (const model of chatGPTModels()) index.set(`chatgpt:${model.id}`, model.contextWindow);
+	for (const model of [...chatGPTModels(), ...nativeSubscriptionModels()]) index.set(`${model.provider}:${model.id}`, model.contextWindow);
 	return index;
 }
 
@@ -214,10 +213,10 @@ export function modelCatalog(): ModelCatalogResponse {
 	const models = piModels()
 		.getProviders()
 		.filter((p) => keyed.has(p.id))
-		.flatMap((p) => providerModels(p.id))
+		.flatMap((p) => piModels().getModels(p.id))
 		.map(toModelDto)
 		.sort((a, b) => (a.provider === b.provider ? a.id.localeCompare(b.id) : a.provider.localeCompare(b.provider)))
-		.concat(chatGPTModels().map(toModelDto));
+		.concat([...chatGPTModels(), ...nativeSubscriptionModels()].map(toModelDto));
 	return {
 		models,
 		defaults: catalogDefaults(),

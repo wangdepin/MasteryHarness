@@ -87,13 +87,6 @@ export function hasOAuthCredential(providerId: string, file: string = OAUTH_FILE
 	return readMap(file)[providerId]?.type === "oauth";
 }
 
-/** Sync read of one provider's subscription credential, for catalog code
- *  that cannot await (it never leaves the server). */
-export function readOAuthCredential(providerId: string, file: string = OAUTH_FILE): Credential | undefined {
-	const credential = readMap(file)[providerId];
-	return credential?.type === "oauth" ? credential : undefined;
-}
-
 /** The stable id of this app installation (pi-ai login flows send it to
  *  the provider); created on first use, then returned unchanged. */
 export function installationId(file: string = path.join(path.dirname(OAUTH_FILE), "installation-id")): string {

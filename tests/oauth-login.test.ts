@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
-import { loginPageUrl, parseCodeBody, parseStartBody, type OAuthLoginView } from "../src/core/oauth-login.ts";
+import { parseCodeBody, parseStartBody, type OAuthLoginView } from "../src/core/oauth-login.ts";
 import { FileCredentialStore, hasOAuthCredential, installationId } from "../src/store/oauth-credentials.ts";
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), "lh-oauth-"));
@@ -12,10 +12,8 @@ const oauth = (access: string) => ({ type: "oauth" as const, access, refresh: "r
 describe("request parsing", () => {
 	it("start accepts only the offered providers", () => {
 		assert.deepEqual(parseStartBody({ provider: "anthropic" }), { ok: true, value: { provider: "anthropic" } });
-		for (const id of ["github-copilot", "xai"]) {
-			assert.deepEqual(parseStartBody({ provider: id }), { ok: true, value: { provider: id } });
-		}
-		for (const body of [null, [], {}, { provider: "amazon-bedrock" }, { provider: 7 }]) {
+		assert.deepEqual(parseStartBody({ provider: "antigravity" }), { ok: true, value: { provider: "antigravity" } });
+		for (const body of [null, [], {}, { provider: "amazon-bedrock" }, { provider: "xai" }, { provider: "github-copilot" }, { provider: "openai" }, { provider: 7 }]) {
 			assert.equal(parseStartBody(body).ok, false, JSON.stringify(body));
 		}
 	});
@@ -25,23 +23,6 @@ describe("request parsing", () => {
 		for (const body of [null, {}, { loginId: "a" }, { loginId: "", code: "x" }, { loginId: "a", code: "  " }, { loginId: "a", code: "x".repeat(4001) }]) {
 			assert.equal(parseCodeBody(body).ok, false, JSON.stringify(body));
 		}
-	});
-});
-
-describe("loginPageUrl", () => {
-	const view = (extra: Partial<OAuthLoginView>): OAuthLoginView => ({ loginId: "l", provider: "p", status: "awaiting_browser", ...extra });
-
-	it("is the authorization page of a browser flow", () => {
-		assert.equal(loginPageUrl(view({ authUrl: "https://example.test/authorize" })), "https://example.test/authorize");
-	});
-
-	it("is the verification page of a device-code flow, where the code is typed", () => {
-		const deviceCode = { userCode: "ABCD-1234", verificationUri: "https://accounts.x.ai/device" };
-		assert.equal(loginPageUrl(view({ deviceCode })), "https://accounts.x.ai/device");
-	});
-
-	it("is absent until the flow has a page", () => {
-		assert.equal(loginPageUrl(view({ status: "starting" })), undefined);
 	});
 });
 

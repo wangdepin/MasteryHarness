@@ -21,9 +21,9 @@ const until = async (check: () => boolean) => {
 };
 
 describe("subscription login sessions", () => {
-	it("offers Claude, Antigravity, Copilot and Grok with their plan names", () => {
+	it("offers Claude and Antigravity with their plan names", () => {
 		const rows = oauthProviderRows();
-		assert.deepEqual(rows.map((r) => r.id), ["anthropic", "antigravity", "github-copilot", "xai"]);
+		assert.deepEqual(rows.map((r) => r.id), ["anthropic", "antigravity"]);
 		assert.ok(rows.every((r) => r.planName.length > 0));
 	});
 
@@ -60,29 +60,7 @@ describe("subscription login sessions", () => {
 		assert.match(loginView(loginId)?.error ?? "", /unsupported login prompt: select/);
 	});
 
-	it("answers Copilot's Enterprise-domain prompt with blank, so only github.com is used", async () => {
-		let answer: string | undefined;
-		script("github-copilot", async (i) => {
-			answer = await i.prompt({ type: "text", message: "GitHub Enterprise URL/domain (blank for github.com)" });
-			i.notify({ type: "device_code", userCode: "ABCD-1234", verificationUri: "https://github.com/login/device" });
-		});
-		const { loginId } = startLogin("github-copilot");
-		await until(() => loginView(loginId)?.status === "done");
-		assert.equal(answer, "");
-	});
-
-	it("shows a device code for Grok sign-in", async () => {
-		script("xai", async (i) => {
-			i.notify({ type: "device_code", userCode: "WXYZ-9876", verificationUri: "https://accounts.x.ai/device" });
-			await new Promise(() => undefined);
-		});
-		const { loginId } = startLogin("xai");
-		await until(() => loginView(loginId)?.status === "awaiting_browser");
-		assert.deepEqual(loginView(loginId)?.deviceCode, { userCode: "WXYZ-9876", verificationUri: "https://accounts.x.ai/device" });
-		cancelLogin(loginId);
-	});
-
-	it("still refuses a text prompt from any other provider", async () => {
+	it("refuses a text prompt", async () => {
 		script("anthropic", async (i) => {
 			await i.prompt({ type: "text", message: "Anything" });
 		});

@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import type { SessionPricing, TurnUsage } from "@/src/core";
-import { formatTokens, formatUsd, prettyModel } from "@/components/usage-format";
+import { subscriptionLabels, subscriptionLabel, type SessionPricing, type TurnUsage } from "@/src/core";
+import { formatTokens, formatUsd, planCostLabel, prettyModel } from "@/components/usage-format";
 import { ModelControl, catalogLimits, useModelCatalog } from "@/components/model-picker";
 
 export function formatContextMeasurement(tokens: number | null, limit: number | null): string {
@@ -89,7 +89,8 @@ export function StatsBar({
 	// Honest cost: show dollars only when at least one turn priced;
 	// otherwise "—" (never a fake $0.0000).
 	const pricedCount = turns.length - unpriced - subscription;
-	const costLabel = subscription ? (pricedCount > 0 ? `${formatUsd(cost)} API + ChatGPT plan` : "ChatGPT plan") : pricedCount > 0 ? formatUsd(cost) : "—";
+	const providers = pricing?.subscriptionProviders ?? subscriptionLabels(turns.map((turn) => turn.model));
+	const costLabel = planCostLabel(pricedCount > 0 ? cost : null, providers);
 
 	return (
 		<div
@@ -147,7 +148,7 @@ export function StatsBar({
 								<span>{subscription ? "Usage" : "Total cost"}</span>
 								<span className="tabular-nums text-card-foreground">{costLabel}</span>
 							</div>
-							{subscription > 0 && <a href="https://chatgpt.com/settings/usage" target="_blank" rel="noreferrer" className="underline underline-offset-2">Manage ChatGPT usage</a>}
+							{providers.includes("ChatGPT") && <a href="https://chatgpt.com/settings/usage" target="_blank" rel="noreferrer" className="underline underline-offset-2">Manage ChatGPT usage</a>}
 							{unpriced > 0 && (
 								<div className="flex justify-between gap-2">
 									<span>Unpriced turns</span>
@@ -170,7 +171,7 @@ export function StatsBar({
 												</span>
 												<span className="flex shrink-0 items-center gap-2 tabular-nums text-card-foreground">
 													<span className="text-muted-foreground">{turn.steps.length} steps</span>
-													<span>{turn.model.startsWith("chatgpt:") ? "ChatGPT plan" : c === null ? "—" : formatUsd(c)}</span>
+													<span>{subscriptionLabel(turn.model) ?? (c === null ? "—" : formatUsd(c))}</span>
 												</span>
 											</li>
 										);

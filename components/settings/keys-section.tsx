@@ -26,7 +26,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AUTH_KEYS, type AuthKeyStatus } from "@/src/core";
 import { SettingsGroup } from "./controls.tsx";
-import { ChatGPTConnection } from "./chatgpt-connection.tsx";
+import { SubscriptionConnections } from "./subscription-connections.tsx";
 import { ProviderMenuList } from "./model-menu.tsx";
 import { SubscriptionLogin } from "./subscription-login.tsx";
 import { MenuShell } from "@/components/menu-shell";
@@ -457,7 +457,7 @@ export function KeysSection({
 			</SettingsGroup>
 
 			<SettingsGroup label="Subscriptions" testid="group-subscriptions">
-				<div data-testid="group-chatgpt"><ChatGPTConnection /></div>
+				<SubscriptionConnections />
 			</SettingsGroup>
 
 			<SubscriptionLogin />

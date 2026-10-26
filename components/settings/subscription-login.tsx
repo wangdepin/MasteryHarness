@@ -2,14 +2,14 @@
 
 /**
  * "Subscription sign-in" group of the Keys section (owner, 2026-10-21): use
- * a ChatGPT, Claude, GitHub Copilot, Grok or Google plan instead of an API key. Sign in opens the
+ * a Claude or Google plan instead of an API key. Sign in opens the
  * provider's page in the browser; flows that cannot reach the local
  * callback ask for the authorization code pasted back. The server holds the
  * tokens — this component only ever sees status.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { loginPageUrl, type OAuthLoginView, type OAuthProviderRow } from "@/src/core";
+import { type OAuthLoginView, type OAuthProviderRow } from "@/src/core";
 import { notifySettingsSaved } from "@/components/settings-signal";
 import { SettingsGroup } from "./controls.tsx";
 
@@ -20,7 +20,7 @@ function statusText(view: OAuthLoginView): string {
 		case "starting":
 			return "Starting…";
 		case "awaiting_browser":
-			return view.deviceCode ? `Enter code ${view.deviceCode.userCode} on the page that opened` : "Waiting for you to finish in the browser…";
+			return "Waiting for you to finish in the browser…";
 		case "awaiting_code":
 			return view.codePrompt ?? "Paste the authorization code";
 		case "done":
@@ -49,7 +49,7 @@ function ProviderRow({ row, onChanged }: { row: OAuthProviderRow; onChanged: () 
 	}, [active, login, poll]);
 
 	// Open the provider's page once per attempt, as soon as the flow has one.
-	const pageUrl = login ? loginPageUrl(login) : undefined;
+	const pageUrl = login?.authUrl;
 	useEffect(() => {
 		if (login && pageUrl && opened.current !== login.loginId) {
 			opened.current = login.loginId;

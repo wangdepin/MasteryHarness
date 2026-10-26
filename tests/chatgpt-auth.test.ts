@@ -337,9 +337,25 @@ for (const holdVerification of [false, true]) test(`invalid rotating replacement
 	} finally { f.service.close(); }
 });
 
-test("observed file write failure invalidates all work; status, consent and resume cannot reload stale credentials or repair authority", async () => {
+for (const holdVerification of [false, true]) test(`observed file write failure invalidates all work; status, consent and resume cannot reload stale credentials or repair authority${holdVerification ? " (held JWKS regression)" : ""}`, { timeout: 10000 }, async () => {
 	let lost = false, reads = 0; const pushes: any[] = [];
-	const f = await loggedIn({ read: () => { reads++; }, write: async () => { if (lost) throw Object.assign(new Error("storage"), { code: "storage" }); }, change: (push) => pushes.push(push) });
+	const reconnectComplete = deferred<any>();
+	const verificationEntered = deferred(), verificationRelease = deferred();
+	let reconnectArmed = false, sawPending = false, completed = false;
+	const f = await loggedIn({ read: () => { reads++; }, write: async () => { if (lost) throw Object.assign(new Error("storage"), { code: "storage" }); },
+		change: (push) => {
+			pushes.push(push);
+			if (!reconnectArmed) return;
+			if (push.status.pending) sawPending = true;
+			else if (sawPending) { completed = true; reconnectComplete.resolve(push.status); }
+		},
+		provider: async (url) => {
+			if (holdVerification && reconnectArmed && url.endsWith("jwks.json")) {
+				verificationEntered.resolve(); await verificationRelease.promise;
+			}
+			return undefined;
+		},
+	});
 	try {
 		await f.service.lease(false); const epoch = f.service.stamp().epoch;
 		lost = true;
@@ -351,10 +367,26 @@ test("observed file write failure invalidates all work; status, consent and resu
 		await assert.rejects(f.service.lease(false));
 		assert.equal((await f.service.status()).accounts[0].connected, false);
 		assert.equal(reads, 1, "a recovered disk never causes a stale credential reload");
-		await f.service.login(f.saved.activeId); await f.callback();
-		for (let i = 0; i < 100 && (await f.service.status()).pending; i++) await new Promise((resolve) => setImmediate(resolve));
-		assert.equal((await f.service.status()).accounts[0].connected, true, "verified login plus durable save can explicitly reconnect");
-	} finally { f.service.close(); }
+		const writesBeforeReconnect = f.writeCount;
+		// The initial login already settled fixture.changed; observe this attempt instead.
+		reconnectArmed = true;
+		await f.service.login(f.saved.activeId); assert.equal(sawPending, true); await f.callback();
+		if (holdVerification) {
+			await verificationEntered.promise;
+			assert.equal(completed, false, "HTTP acknowledgement cannot complete a pending identity verification");
+			const held = await f.service.status();
+			assert.equal(held.pending, true); assert.equal(held.error, null);
+			assert.equal(held.accounts[0].connected, false);
+			assert.equal(f.writeCount, writesBeforeReconnect, "unverified recovery cannot persist credentials");
+		}
+		verificationRelease.resolve();
+		const terminal = await reconnectComplete.promise;
+		assert.equal(terminal.pending, false); assert.equal(terminal.error, null);
+		assert.equal(terminal.accounts[0].connected, true, "verified login plus durable save can explicitly reconnect");
+		assert.equal(f.writeCount, writesBeforeReconnect + 1, "recovery requires a new durable credential write");
+		assert.equal(f.saved.activeId, terminal.activeId);
+		assert.equal(reads, 1, "explicit recovery still never reloads stale credentials");
+	} finally { verificationRelease.resolve(); f.service.close(); }
 });
 
 test("strict JSON schema rejects malformed marker/duplicates/token/active identity without changing original bytes", async () => {

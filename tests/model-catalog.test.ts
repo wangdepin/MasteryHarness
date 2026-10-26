@@ -1,6 +1,3 @@
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -11,7 +8,6 @@ import {
 	clampChatLevel,
 	clampModelsLevels,
 	modelCatalog,
-	providerModels,
 	rolePinsFor,
 	toModelDto,
 	validateChatSettings,
@@ -341,34 +337,5 @@ describe("sign-in-only providers (Antigravity)", () => {
 		assert.equal(row!.keyPresent, false);
 		assert.ok(!modelCatalog().models.some((m) => m.provider === "antigravity"));
 		assert.equal(providerKeyPresent("antigravity"), false);
-	});
-});
-
-describe("subscription entitlement (GitHub Copilot)", () => {
-	const credentialsFile = (copilot: Record<string, unknown>) => {
-		const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "lh-catalog-")), "oauth-credentials.json");
-		fs.writeFileSync(file, JSON.stringify({ "github-copilot": { type: "oauth", access: "a", refresh: "r", expires: 1, ...copilot } }));
-		return file;
-	};
-
-	it("lists only the models the plan entitles", () => {
-		const all = piModels().getModels("github-copilot");
-		assert.ok(all.length > 2, "Copilot's full catalog is larger than the entitled pair");
-		const entitled = [all[0]!.id, all[1]!.id];
-		const listed = providerModels("github-copilot", credentialsFile({ availableModelIds: entitled })).map((m) => m.id);
-		assert.deepEqual(listed, entitled);
-	});
-
-	it("lists the whole catalog when nobody is signed in", () => {
-		const missing = path.join(os.tmpdir(), "lh-catalog-absent", "oauth-credentials.json");
-		assert.equal(providerModels("github-copilot", missing).length, piModels().getModels("github-copilot").length);
-	});
-
-	it("is a sign-in-only provider like Antigravity: no key row env var, models gated on the sign-in", () => {
-		const row = catalogProviders().find((p) => p.id === "github-copilot");
-		assert.ok(row);
-		assert.equal(row!.envVar, "");
-		assert.equal(row!.keyPresent, false);
-		assert.ok(!modelCatalog().models.some((m) => m.provider === "github-copilot"));
 	});
 });
