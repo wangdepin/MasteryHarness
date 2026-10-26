@@ -611,6 +611,43 @@ describe("research runner (async protocol §3)", () => {
 		assert.deepEqual(search.queries, ["sigma.js latest version (5)"]);
 	});
 
+	it("a keyless fetch-only researcher still completes and delivers a sourced job result", async () => {
+		const url = "https://example.com/supplied-source";
+		const brief = `## Summary\nVerified supplied source. [Source](${url})\n\n## Sources\n- Source (${url})`;
+		const input = { question: `Verify ${url}` };
+		const chat = chatStore.createChat("Test: keyless fetch-only research");
+		trackChat(chat.id);
+		chatStore.saveMessages(chat.id, nativeToolMessages("verify supplied URL", "research", "call-keyless", input));
+		const job = jobStore.createJob({ kind: "research", chatId: chat.id, toolCallId: "call-keyless" });
+		trackJob(job.id);
+		const delivery = fakeDeliver();
+		const runner = createJobRunner({ chatStore, jobStore, deliver: delivery.deliver, searchProvider: () => null });
+		const fetched: string[] = [];
+		const realFetch = globalThis.fetch;
+		globalThis.fetch = (async (source) => {
+			fetched.push(String(source));
+			assert.equal(String(source), url);
+			return new Response("Synthetic verified source content", { headers: { "content-type": "text/plain" } });
+		}) as typeof fetch;
+		researchModelOverride.current = fauxEngine([
+			fauxAssistantMessage([fauxToolCall("web_fetch", { url }, { id: "keyless-fetch" })], { stopReason: "toolUse" }),
+			fauxAssistantMessage([fauxText(brief)]),
+		]);
+		try {
+			await runner.runJob(job.id);
+		} finally {
+			researchModelOverride.current = undefined;
+			globalThis.fetch = realFetch;
+		}
+		assert.deepEqual(fetched, [url]);
+		const done = jobStore.getJob(job.id)!;
+		assert.equal(done.status, "done");
+		assert.equal((done.result as ResearchResult).brief, brief);
+		assert.ok((done.result as ResearchResult).sources.some((s) => s.url === url));
+		assert.equal(delivery.steers.length, 1);
+		assert.equal(isSubagentFailure("research", done.result as ResearchResult), false);
+	});
+
 	it("a failing runner still steers (the teacher learns the outcome) and the job lands error", async () => {
 		const chat = chatStore.createChat("Test: runner failure");
 		trackChat(chat.id);

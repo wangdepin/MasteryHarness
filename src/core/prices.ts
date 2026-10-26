@@ -1661,6 +1661,8 @@ export function sumSteps(steps: readonly CallUsage[]): CallUsage {
 /** One model call's inferred cost in USD — null when the model is unknown
  *  or the usage fields are absent (never guess a price). Cached input bills
  *  at the cache-read rate; cache writes bill separately where priced. */
+export function isChatGPTPlan(model: string | undefined): boolean { return model?.startsWith("chatgpt:") === true; }
+
 export function callCost(
 	usage: { inputTokens?: number; outputTokens?: number; cacheReadTokens?: number; cacheWriteTokens?: number },
 	model: string,
@@ -1681,6 +1683,7 @@ export function callCost(
 
 /** One turn's inferred cost — the sum over its steps; null when unpriceable. */
 export function turnCost(turn: TurnUsage): number | null {
+	if (isChatGPTPlan(turn.model)) return null;
 	let total = 0;
 	for (const step of turn.steps) {
 		const c = callCost(step, turn.model);
@@ -1693,15 +1696,17 @@ export function turnCost(turn: TurnUsage): number | null {
 /** Fold a chat record's turn log: total inferred session cost. Unknown-model
  *  or partial-usage turns don't poison the total — they count as unpriced
  *  and are reported alongside, so the UI can show "n turns unpriced". */
-export function sessionCost(record: Pick<ChatRecord, "turns">): { cost: number; unpriced: number } {
+export function sessionCost(record: Pick<ChatRecord, "turns">): { cost: number; unpriced: number; subscription?: number } {
 	let cost = 0;
 	let unpriced = 0;
+	let subscription = 0;
 	for (const turn of record.turns ?? []) {
+		if (isChatGPTPlan(turn.model)) { subscription++; continue; }
 		const c = turnCost(turn);
 		if (c === null) unpriced++;
 		else cost += c;
 	}
-	return { cost, unpriced };
+	return { cost, unpriced, ...(subscription ? { subscription } : {}) };
 }
 
 /** The session's context-window footprint: the LAST model call's

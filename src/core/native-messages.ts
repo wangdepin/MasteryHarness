@@ -43,6 +43,8 @@ import {
 	THINKING_LABEL,
 } from "./contracts/chat.ts";
 import { compactAnswer, type AnswerData } from "./answers.ts";
+import { isCodeExerciseAnswer } from "./code-exercise.ts";
+import type { QuestionAnswerData } from "./question-core.ts";
 import { activeCompactionOf, keptIndexFor } from "./compaction.ts";
 
 /** The hard-invariant wording for an aborted turn's unanswered calls —
@@ -672,6 +674,62 @@ function isDismissedResult(m: LhMessage): boolean {
 export function endsInDismissal(messages: readonly LhMessage[]): boolean {
 	const last = messages[messages.length - 1];
 	return last !== undefined && isDismissedResult(last);
+}
+
+export type RequestCause = "foreground" | "background";
+export type ReconstructedCause = RequestCause | "ambiguous";
+export type NativeInputCause = "learner" | "automatic" | "neutral" | "unrecognizable";
+/** Native causes only: flattened user roles, IDs' prefixes and prose confer no permission. */
+export function nativeInputCause(message: AgentMessage, history: readonly AgentMessage[]): NativeInputCause {
+	if (message.role === "user") return "learner";
+	if (message.role === "system" || message.role === "assistant") return "neutral";
+	if (message.role === "custom") {
+		if (["probe-handoff", "subagent-steer", "subagent-abort"].includes(message.customType)) return "automatic";
+		if (["practice-thinking", "practice-next"].includes(message.customType)) return "learner";
+		return ["graph-context", "plan-block", "problem-dismissed", "compaction"].includes(message.customType) ? "neutral" : "unrecognizable";
+	}
+	if (message.role === "toolResult") {
+		if (!(QUESTION_TOOLS as readonly string[]).includes(message.toolName) || message.isError || message.details == null || (message.details as { dismissed?: boolean }).dismissed) return "neutral";
+		if (isCodeExerciseAnswer(message.details)) return typeof message.details.questionText === "string" && typeof message.details.answeredAt === "string" ? learnerAnswerFor(message, history) : "unrecognizable";
+		const details = message.details as Partial<QuestionAnswerData>;
+		if (!["quiz", "ask", "explain"].includes(details.kind ?? "") || typeof details.questionText !== "string" || typeof details.dontKnow !== "boolean" || !Array.isArray(details.answers) || typeof details.answeredAt !== "string") return "unrecognizable";
+		return learnerAnswerFor(message, history);
+	}
+	return "unrecognizable";
+}
+/** A well-formed answer is the learner's only when exactly one assistant call of that tool produced it. */
+function learnerAnswerFor(message: ToolResultMessage, history: readonly AgentMessage[]): NativeInputCause {
+	const calls = history.flatMap((m) => m.role === "assistant" ? m.content.filter((b) => b.type === "toolCall" && b.id === message.toolCallId) : []);
+	return calls.length === 1 && calls[0]?.type === "toolCall" && calls[0].name === message.toolName ? "learner" : "unrecognizable";
+}
+/** Full persisted native record, including pre-compaction causes. Never guessed foreground. */
+export function reconstructRequestCause(messages: readonly LhMessage[]): ReconstructedCause {
+	let inherited: ReconstructedCause = "ambiguous";
+	let triggers: NativeInputCause[] = [];
+	const seen = new Map<string, string>();
+	const history: AgentMessage[] = [];
+	const resolve = (): ReconstructedCause => {
+		if (triggers.includes("unrecognizable")) return "ambiguous";
+		const lastLearner = triggers.lastIndexOf("learner"), lastAutomatic = triggers.lastIndexOf("automatic");
+		if (lastLearner < 0 && lastAutomatic < 0) return inherited;
+		if (lastAutomatic < 0) return "foreground";
+		if (lastLearner < lastAutomatic) return "background";
+		return "ambiguous";
+	};
+	for (const message of messages) {
+		const cause = nativeInputCause(message, history);
+		const id = (message as { id?: string }).id;
+		if (id) {
+			const value = JSON.stringify(message);
+			if (seen.has(id)) { if (seen.get(id) !== value) triggers.push("unrecognizable"); continue; }
+			seen.set(id, value);
+		} else if (cause !== "neutral") triggers.push("unrecognizable");
+		if (message.role === "assistant" && !(message.provider === "synthetic" && message.api === "faux" && message.model === "synthetic-conclude" && message.content.some((b) => b.type === "toolCall" && b.name === "conclude" && b.arguments?.outcome === "dismissed"))) {
+			inherited = resolve(); triggers = [];
+		} else if (cause !== "neutral") triggers.push(cause);
+		history.push(message);
+	}
+	return resolve();
 }
 
 export function needsContinuation(messages: readonly LhMessage[]): boolean {

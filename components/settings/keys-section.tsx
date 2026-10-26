@@ -15,8 +15,8 @@
  *    a paste box on a key the UI cannot make live would mislead.
  *  - OpenRouter is NOT special: one provider among 33, a row only when
  *    stored, otherwise it lives in the Add dropdown like everyone else.
- *  - Tools & services (Deepgram, the Google pair) keep their own group,
- *    same look, same interaction.
+ *  - Providers groups API keys, subscriptions, dictation and search.
+ *    Unknown variables stay masked/read-only at the end of Model API keys.
  *
  * API: GET /api/keys (masked statuses + the providers array), PUT
  * /api/keys/:id (shape-gated 400s land inline), DELETE. Saves take
@@ -26,6 +26,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AUTH_KEYS, type AuthKeyStatus } from "@/src/core";
 import { SettingsGroup } from "./controls.tsx";
+import { ChatGPTConnection } from "./chatgpt-connection.tsx";
 import { ProviderMenuList } from "./model-menu.tsx";
 import { SubscriptionLogin } from "./subscription-login.tsx";
 import { MenuShell } from "@/components/menu-shell";
@@ -413,7 +414,7 @@ export function KeysSection({
 
 	return (
 		<>
-			<SettingsGroup label="Model providers" testid="group-provider-keys">
+			<SettingsGroup label="Model API keys" testid="group-provider-keys">
 				{providerRows.map((status) => (
 					<KeyTableRow
 						key={status.id}
@@ -447,12 +448,22 @@ export function KeysSection({
 						<AddProviderEditor provider={adding} onSave={(v) => void saveNewProvider(adding, v)} onCancel={() => setAdding(null)} error={addError} />
 					</div>
 				)}
+				{unknownRows.length > 0 && <div data-testid="group-unknown-keys">
+					{unknownRows.map((status) => <div key={status.id} data-testid={`unknown-${status.id}`} className="flex items-center justify-between gap-3 px-1 py-1.5 opacity-40">
+						<span className="font-mono text-xs text-foreground">{status.id}</span>
+						<span className="font-mono text-[11px] text-muted-foreground">{status.masked}</span>
+					</div>)}
+				</div>}
+			</SettingsGroup>
+
+			<SettingsGroup label="Subscriptions" testid="group-subscriptions">
+				<div data-testid="group-chatgpt"><ChatGPTConnection /></div>
 			</SettingsGroup>
 
 			<SubscriptionLogin />
 
-			<SettingsGroup label="Tools & services" testid="group-tool-keys">
-				{toolRows.map((status) => (
+			{(["Dictation", "Search"] as const).map((label) => <SettingsGroup key={label} label={label} testid={label === "Dictation" ? "group-dictation" : "group-search"}>
+				{toolRows.filter((status) => label === "Dictation" ? status.id === "DEEPGRAM_API_KEY" : status.id !== "DEEPGRAM_API_KEY").map((status) => (
 					<KeyTableRow
 						key={status.id}
 						label={status.info?.label ?? status.id}
@@ -470,22 +481,8 @@ export function KeysSection({
 						testid={`key-${status.id.toLowerCase()}`}
 					/>
 				))}
-			</SettingsGroup>
+			</SettingsGroup>)}
 
-			{unknownRows.length > 0 && (
-				<SettingsGroup label="Other stored variables" testid="group-unknown-keys">
-					{unknownRows.map((status) => (
-						<div
-							key={status.id}
-							data-testid={`unknown-${status.id}`}
-							className="flex items-center justify-between gap-3 px-1 py-1.5 opacity-40"
-						>
-							<span className="font-mono text-xs text-foreground">{status.id}</span>
-							<span className="font-mono text-[11px] text-muted-foreground">{status.masked}</span>
-						</div>
-					))}
-				</SettingsGroup>
-			)}
 		</>
 	);
 }

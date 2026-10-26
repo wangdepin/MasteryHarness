@@ -4,11 +4,10 @@
  * /api/auth/oauth routes. No I/O.
  */
 
-/** Providers offered for subscription sign-in (owner scope: ChatGPT, Claude,
+/** Providers offered for subscription sign-in (owner scope: Claude,
  *  GitHub Copilot and Grok through pi-ai's own login flows, plus Google
  *  Antigravity through the vendored provider in src/agent/providers/antigravity). */
 export const SUBSCRIPTION_PROVIDERS: readonly { id: string; label: string }[] = [
-	{ id: "openai", label: "ChatGPT" },
 	{ id: "anthropic", label: "Claude" },
 	{ id: "antigravity", label: "Google (Antigravity)" },
 	{ id: "github-copilot", label: "GitHub Copilot" },

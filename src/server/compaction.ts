@@ -89,6 +89,8 @@ async function subagentSummarizer(prompt: string, engine: PiEngine): Promise<{ s
 /** Everything the service needs from its host (chat-handler wires the
  *  production versions; tests inject). */
 export interface CompactionDeps {
+	/** Eligibility only for NEW runs; structural waits still apply. */
+	canStart?: () => boolean;
 	chatStore: ChatStore;
 	/** The chat's conversation engine — also the summarizer's. */
 	engine: PiEngine;
@@ -267,6 +269,7 @@ export async function ensureCompacted(deps: CompactionDeps, chatId: string): Pro
 	// injected summarizer.
 	if (process.env.NODE_ENV === "test" && !deps.summarize) return;
 	await awaitCompaction(chatId);
+	if (deps.canStart?.() === false) return;
 	const record = deps.chatStore.getChat(chatId);
 	if (!record) return;
 	if (projectedContextTokens(record.messages, deps.systemPromptTokens) <= deps.thresholdTokens) return;
@@ -291,7 +294,7 @@ export async function ensureCompacted(deps: CompactionDeps, chatId: string): Pro
 export function kickCompaction(buildDeps: () => CompactionDeps | null, chatId: string): void {
 	if (state().inFlight.has(chatId)) return;
 	const deps = buildDeps();
-	if (!deps) return;
+	if (!deps || deps.canStart?.() === false) return;
 	const record = deps.chatStore.getChat(chatId);
 	if (!record) return;
 	if (projectedContextTokens(record.messages, deps.systemPromptTokens) <= deps.thresholdTokens) return;

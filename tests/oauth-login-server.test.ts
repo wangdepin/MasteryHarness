@@ -21,9 +21,9 @@ const until = async (check: () => boolean) => {
 };
 
 describe("subscription login sessions", () => {
-	it("offers ChatGPT, Claude, Antigravity, Copilot and Grok with their plan names", () => {
+	it("offers Claude, Antigravity, Copilot and Grok with their plan names", () => {
 		const rows = oauthProviderRows();
-		assert.deepEqual(rows.map((r) => r.id), ["openai", "anthropic", "antigravity", "github-copilot", "xai"]);
+		assert.deepEqual(rows.map((r) => r.id), ["anthropic", "antigravity", "github-copilot", "xai"]);
 		assert.ok(rows.every((r) => r.planName.length > 0));
 	});
 
@@ -43,19 +43,19 @@ describe("subscription login sessions", () => {
 	});
 
 	it("reports flow failures as an error view", async () => {
-		script("openai", async () => {
+		script("anthropic", async () => {
 			throw new Error("invalid_grant");
 		});
-		const { loginId } = startLogin("openai");
+		const { loginId } = startLogin("anthropic");
 		await until(() => loginView(loginId)?.status === "error");
 		assert.equal(loginView(loginId)?.error, "invalid_grant");
 	});
 
 	it("rejects an unsupported prompt instead of guessing", async () => {
-		script("openai", async (i) => {
+		script("anthropic", async (i) => {
 			await i.prompt({ type: "select", message: "Pick", options: [{ id: "a", label: "A" }] });
 		});
-		const { loginId } = startLogin("openai");
+		const { loginId } = startLogin("anthropic");
 		await until(() => loginView(loginId)?.status === "error");
 		assert.match(loginView(loginId)?.error ?? "", /unsupported login prompt: select/);
 	});
@@ -83,10 +83,10 @@ describe("subscription login sessions", () => {
 	});
 
 	it("still refuses a text prompt from any other provider", async () => {
-		script("openai", async (i) => {
+		script("anthropic", async (i) => {
 			await i.prompt({ type: "text", message: "Anything" });
 		});
-		const { loginId } = startLogin("openai");
+		const { loginId } = startLogin("anthropic");
 		await until(() => loginView(loginId)?.status === "error");
 		assert.match(loginView(loginId)?.error ?? "", /unsupported login prompt: text/);
 	});

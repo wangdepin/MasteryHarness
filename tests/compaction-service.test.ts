@@ -74,6 +74,23 @@ const depsOf = (chatId: string, thresholdTokens: number): CompactionDeps => ({
 // ── the laws ────────────────────────────────────────────────────────────────
 
 describe("the compaction service", () => {
+	it("background eligibility skips both entrypoints without writes, but still awaits an existing structural run", async () => {
+		const chatId = overThresholdChat("compact: consent off");
+		const before = summarizeCalls;
+		const denied = { ...depsOf(chatId, 40_000), canStart: () => false };
+		await ensureCompacted(denied, chatId); kickCompaction(() => denied, chatId);
+		assert.equal(summarizeCalls, before);
+		assert.equal(activeCompactionOf(chatStore.getChat(chatId)!.messages), null);
+		let release!: () => void, entered!: () => void;
+		const gate = new Promise<void>((done) => { release = done; });
+		const started = new Promise<void>((done) => { entered = done; });
+		const allowed = { ...depsOf(chatId, 40_000), summarize: async (prompt: string) => { entered(); await gate; return depsOf(chatId, 40_000).summarize!(prompt, denied.engine); } };
+		kickCompaction(() => allowed, chatId); await started;
+		let finished = false;
+		const waiter = ensureCompacted(denied, chatId).then(() => { finished = true; });
+		await Promise.resolve(); assert.equal(finished, false);
+		release(); await waiter; assert.equal(finished, true);
+	});
 	it("over-threshold record → marker appended, usage logged, both events emitted", async () => {
 		const chatId = overThresholdChat("compact: basic");
 		const events: string[] = [];

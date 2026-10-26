@@ -54,6 +54,7 @@ import {
 import { authStore } from "../store/auth.ts";
 import { hasOAuthCredential } from "../store/oauth-credentials.ts";
 import { isSubscriptionProvider } from "../core/oauth-login.ts";
+import { chatGPTConnected } from "../agent/chatgpt-bridge.ts";
 
 // The once-per-process boot record — globalThis anchor (HMR re-imports the
 // module; the snapshot must not re-run and misread fill-gapped vars as real
@@ -202,6 +203,7 @@ export function keyValue(id: string): string | undefined {
  * (gate by what would run). Providers absent from AUTH_PROVIDER_KEYS take
  * no key at all: present by definition, unless they are sign-in-only. */
 export function providerKeyPresent(provider: string): boolean {
+	if (provider === "chatgpt") return chatGPTConnected();
 	const info = AUTH_PROVIDER_KEYS.find((p) => p.id === provider);
 	if (info) return keyValue(info.envVar) !== undefined || hasOAuthCredential(provider);
 	// Sign-in-only providers (Antigravity): present exactly when signed in.

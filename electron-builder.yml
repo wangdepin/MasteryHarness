@@ -81,6 +81,8 @@ files:
   - node_modules/universalify/**/*
   - node_modules/ms/**/*
   - node_modules/argparse/**/*
+  # Main-process ID-token signature verification (no bundled OAuth implementation).
+  - node_modules/jose/**/*
 extraResources:
   # Copy from the PARENT dir (.next), not .next/standalone itself:
   # electron-builder hard-excludes a copy's root node_modules and the
