@@ -9,7 +9,7 @@
  * the same ruling as wave 7's stages.embedding.)
  *
  * MONEY CHANNEL LAW: dollars are INFERRED here at read time via
- * core/prices.ts — never stored anywhere. An unpriced model contributes
+ * an injected server-side Pi pricer — never stored anywhere. An unpriced model contributes
  * ZERO dollars but is counted in `unpricedRuns` so the UI can render
  * "— unpriced" honestly, never a silent zero. Tokens always sum.
  *
@@ -18,7 +18,7 @@
  */
 
 import type { CallUsage, EmissionStats, ExtractionRunUsage } from "./contracts.ts";
-import { callCost, sumSteps, isChatGPTPlan } from "./prices.ts";
+import { sumSteps, isChatGPTPlan, type CallPricer } from "./prices.ts";
 
 /** One pipeline stage's cumulative cost across every run. */
 export interface StageCost {
@@ -26,7 +26,7 @@ export interface StageCost {
 	subscriptionRuns?: number;
 	/** Inferred USD summed over PRICED runs (partial when unpricedRuns > 0). */
 	dollars: number;
-	/** Stage-runs whose model is missing from PRICES (render "—", never zero). */
+	/** Stage-runs whose model is missing from Pi's catalog (render "—", never zero). */
 	unpricedRuns: number;
 	/** Runs that billed this stage. */
 	runs: number;
@@ -92,11 +92,11 @@ const emptyStage = (): StageCost => ({ dollars: 0, unpricedRuns: 0, runs: 0, tok
 
 /** One stage's dollars over its steps; null when the model is unpriced
  *  (all-or-nothing: a stage runs one model). */
-function stageDollars(model: string, steps: readonly CallUsage[]): number | null {
-	if (isChatGPTPlan(model)) return null;
+function stageDollars(model: string, steps: readonly CallUsage[], price: CallPricer): number | null {
+	if (isChatGPTPlan(model) || steps.length === 0) return null;
 	let total = 0;
 	for (const step of steps) {
-		const c = callCost(step, model);
+		const c = price(step, model);
 		if (c === null) return null;
 		total += c;
 	}
@@ -106,6 +106,9 @@ function stageDollars(model: string, steps: readonly CallUsage[]): number | null
 /** Merge one step-set's tokens into an accumulating CallUsage. */
 function mergeTokens(into: CallUsage, steps: readonly CallUsage[]): void {
 	const summed = sumSteps(steps);
+	// Fold this before updating total writes, so an older write-bearing
+	// aggregate with a missing split remains unknown even after fresh data.
+	into.cacheWrite1hTokens = sumSteps([into, summed]).cacheWrite1hTokens;
 	into.inputTokens = (into.inputTokens ?? 0) + (summed.inputTokens ?? 0);
 	into.outputTokens = (into.outputTokens ?? 0) + (summed.outputTokens ?? 0);
 	into.cacheReadTokens = (into.cacheReadTokens ?? 0) + (summed.cacheReadTokens ?? 0);
@@ -115,7 +118,7 @@ function mergeTokens(into: CallUsage, steps: readonly CallUsage[]): void {
 
 /** Fold every usage channel into the pill's payload. Pure: same input,
  *  same output — no clock, no fs, no store reads. */
-export function graphCostSummary(input: CostSummaryInput): GraphCostSummary {
+export function graphCostSummary(input: CostSummaryInput, price: CallPricer): GraphCostSummary {
 	const extraction = emptyStage();
 	const audit = emptyStage();
 	const runs: RecentRun[] = [];
@@ -125,14 +128,14 @@ export function graphCostSummary(input: CostSummaryInput): GraphCostSummary {
 		// Per-stage: tokens always count; dollars only when priced.
 		extraction.runs++;
 		mergeTokens(extraction.tokens, stages.extractor.steps);
-		const extDollars = stageDollars(stages.extractor.model, stages.extractor.steps);
+		const extDollars = stageDollars(stages.extractor.model, stages.extractor.steps, price);
 		if (isChatGPTPlan(stages.extractor.model)) extraction.subscriptionRuns = (extraction.subscriptionRuns ?? 0) + 1;
 		else if (extDollars === null) extraction.unpricedRuns++;
 		else extraction.dollars += extDollars;
 
 		audit.runs++;
 		mergeTokens(audit.tokens, stages.auditor.steps);
-		const audDollars = stageDollars(stages.auditor.model, stages.auditor.steps);
+		const audDollars = stageDollars(stages.auditor.model, stages.auditor.steps, price);
 		if (isChatGPTPlan(stages.auditor.model)) audit.subscriptionRuns = (audit.subscriptionRuns ?? 0) + 1;
 		else if (audDollars === null) audit.unpricedRuns++;
 		else audit.dollars += audDollars;

@@ -20,7 +20,7 @@ let root: Root | undefined, host: HTMLDivElement | undefined;
 const account = (id = "private-registration-id", email = "learner@example.invalid", connected = true) => ({ id, email, registration: "private-issued-client", connected, planEnabled: connected });
 const disconnected = (allowBackgroundUse = true): ChatGPTStatus => ({ available: true, pending: false, allowBackgroundUse, activeId: null, accounts: [account("signed-out-record", "signed-out@example.invalid", false)], error: null });
 const connected = (allowBackgroundUse = true): ChatGPTStatus => ({ ...disconnected(allowBackgroundUse), activeId: "private-registration-id", accounts: [account(), ...disconnected().accounts] });
-const storageError = "ChatGPT credentials could not be saved securely. Reconnect before making requests.";
+const storageError = "ChatGPT credentials could not be read or saved. Check local file access, then reconnect before making requests.";
 const warning = "Account disconnected locally. Remote revocation could not be confirmed.";
 const errorReply = () => ({ error: storageError } as ChatGPTStatus);
 function deferred<T>() { let resolve!: (v: T) => void; const promise = new Promise<T>((done) => { resolve = done; }); return { promise, resolve }; }

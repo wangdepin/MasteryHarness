@@ -46,3 +46,4 @@ export { runPiTurn, piTurnResponse, type PiTurnHandle, type PiTurnSpec } from ".
 export * from "./observability.ts";
 export * from "./model-catalog.ts";
 export * from "./oauth-login.ts";
+export { sessionCost } from "./pricing.ts";

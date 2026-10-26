@@ -333,6 +333,7 @@ export async function handleChatInput(
 			outputTokens: usage.output,
 			cacheReadTokens: usage.cacheRead,
 			cacheWriteTokens: usage.cacheWrite,
+			cacheWrite1hTokens: usage.cacheWrite1h ?? 0,
 			// Optional in pi's Usage — persisted as 0, never dropped.
 			reasoningTokens: usage.reasoning ?? 0,
 		});

@@ -304,7 +304,7 @@ function graphUsageLabel(costs: Pick<GraphCostSummary, "stages">): string {
 	const plan = stages.some((stage) => (stage.subscriptionRuns ?? 0) > 0);
 	const priced = stages.some((stage) => stage.runs - stage.unpricedRuns - (stage.subscriptionRuns ?? 0) > 0);
 	const dollars = displayCostTotals(costs).totalDollars;
-	return plan ? (priced ? `$${dollars.toFixed(2)} API + ChatGPT plan` : "ChatGPT plan") : `$${dollars.toFixed(2)}`;
+	return plan ? (priced ? `$${dollars.toFixed(2)} API + ChatGPT plan` : "ChatGPT plan") : priced ? `$${dollars.toFixed(2)}` : "—";
 }
 
 /**

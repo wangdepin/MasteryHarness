@@ -24,8 +24,8 @@
  *     would shadow every settings-page key change until restart.
  */
 
-const { app, BrowserWindow, Menu, ipcMain, session, shell, dialog, safeStorage } = require("electron");
-const { createChatGPT, encryptedStore } = require("./chatgpt.cjs");
+const { app, BrowserWindow, Menu, ipcMain, session, shell, dialog } = require("electron");
+const { createChatGPT, fileStore } = require("./chatgpt.cjs");
 const { attachChatGPTChild, trustedSender, chatGPTControl } = require("./chatgpt-ipc.cjs");
 const { desktopAPIHeaders } = require("./desktop-api.cjs");
 const { randomBytes } = require("node:crypto");
@@ -593,7 +593,7 @@ async function main() {
 			callback({ requestHeaders: desktopAPIHeaders(details, ownedOrigin, desktopAPISecret, [...trustedAppWindows]) });
 		});
 		chatgpt = createChatGPT({
-			store: encryptedStore(path.join(app.getPath("userData"), "chatgpt-credentials.enc.json"), safeStorage),
+			store: fileStore(path.join(app.getPath("userData"), "chatgpt-credentials.json")),
 			openExternal: (target) => shell.openExternal(target),
 			onChange: (value) => {
 				chatgptChild?.send(value);
