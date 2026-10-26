@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useReducer, useRef, useState, type KeyboardEvent } from "react";
 import { CheckIcon, PlayIcon, XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { MessageResponse } from "@/components/ai-elements/message";
+import { ToolContentResponse } from "@/components/ai-elements/message";
 import { BrailleSpinner } from "@/components/braille-spinner";
 import { HighlightedCode } from "@/components/highlighted-code";
 import { finishDictation, isDictationActive, joinDictation, useDictationTarget } from "@/components/dictation";
@@ -141,7 +141,7 @@ export function CodeExerciseDock({ input, runtime, onSubmit, compactionRunning =
 					Code · {LANGUAGE_LABELS[input.language]}
 				</div>
 				<div className="mb-3 font-medium">
-					<MessageResponse>{restoreLiteralNewlines(input.question)}</MessageResponse>
+					<ToolContentResponse>{restoreLiteralNewlines(input.question)}</ToolContentResponse>
 				</div>
 
 				<div className="rounded-[10px] border border-border/70 bg-background/60 transition-colors focus-within:border-primary/50">

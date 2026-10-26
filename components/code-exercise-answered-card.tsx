@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { CheckIcon, XIcon } from "lucide-react";
-import { MessageResponse } from "@/components/ai-elements/message";
+import { ToolContentResponse } from "@/components/ai-elements/message";
 import { HighlightedCode } from "@/components/highlighted-code";
 import { ThinkingBlock } from "@/components/thinking-block";
 import { cn } from "@/lib/utils";
@@ -32,7 +32,7 @@ export function CodeExerciseAnsweredCard({ answer }: { answer: CodeExerciseAnswe
 				{answer.graded && <Verdict passed={lastRun?.passed === true} timedOut={lastRun?.timedOut === true} />}
 			</div>
 			<div className="mb-3 font-medium">
-				<MessageResponse>{restoreLiteralNewlines(answer.questionText)}</MessageResponse>
+				<ToolContentResponse>{restoreLiteralNewlines(answer.questionText)}</ToolContentResponse>
 			</div>
 			<pre
 				data-testid="code-answered-code"
@@ -65,9 +65,9 @@ export function CodeExerciseAnsweredCard({ answer }: { answer: CodeExerciseAnswe
 					{whyOpen && (
 						<div className="mt-1.5 rounded-lg bg-muted py-2 text-sm text-foreground/50">
 							<span className="font-medium text-muted-foreground">Why: </span>
-							<MessageResponse className="inline [&_p]:inline [&_p]:m-0">
+							<ToolContentResponse className="inline [&_p]:inline [&_p]:m-0">
 								{restoreLiteralNewlines(answer.explanation)}
-							</MessageResponse>
+							</ToolContentResponse>
 						</div>
 					)}
 				</div>
