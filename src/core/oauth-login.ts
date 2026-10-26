@@ -37,6 +37,13 @@ export interface OAuthLoginView {
 	error?: string;
 }
 
+/** The page the user must visit to finish the login: the provider's
+ *  authorization page, or — for device-code flows (Copilot, Grok) — the page
+ *  where the code is typed. */
+export function loginPageUrl(view: OAuthLoginView): string | undefined {
+	return view.authUrl ?? view.deviceCode?.verificationUri;
+}
+
 /** One provider row of GET /api/auth/oauth. */
 export interface OAuthProviderRow {
 	id: string;

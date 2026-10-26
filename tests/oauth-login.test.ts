@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
-import { parseCodeBody, parseStartBody } from "../src/core/oauth-login.ts";
+import { loginPageUrl, parseCodeBody, parseStartBody, type OAuthLoginView } from "../src/core/oauth-login.ts";
 import { FileCredentialStore, hasOAuthCredential, installationId } from "../src/store/oauth-credentials.ts";
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), "lh-oauth-"));
@@ -25,6 +25,23 @@ describe("request parsing", () => {
 		for (const body of [null, {}, { loginId: "a" }, { loginId: "", code: "x" }, { loginId: "a", code: "  " }, { loginId: "a", code: "x".repeat(4001) }]) {
 			assert.equal(parseCodeBody(body).ok, false, JSON.stringify(body));
 		}
+	});
+});
+
+describe("loginPageUrl", () => {
+	const view = (extra: Partial<OAuthLoginView>): OAuthLoginView => ({ loginId: "l", provider: "p", status: "awaiting_browser", ...extra });
+
+	it("is the authorization page of a browser flow", () => {
+		assert.equal(loginPageUrl(view({ authUrl: "https://example.test/authorize" })), "https://example.test/authorize");
+	});
+
+	it("is the verification page of a device-code flow, where the code is typed", () => {
+		const deviceCode = { userCode: "ABCD-1234", verificationUri: "https://accounts.x.ai/device" };
+		assert.equal(loginPageUrl(view({ deviceCode })), "https://accounts.x.ai/device");
+	});
+
+	it("is absent until the flow has a page", () => {
+		assert.equal(loginPageUrl(view({ status: "starting" })), undefined);
 	});
 });
 

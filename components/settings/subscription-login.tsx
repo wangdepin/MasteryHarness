@@ -9,7 +9,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { OAuthLoginView, OAuthProviderRow } from "@/src/core";
+import { loginPageUrl, type OAuthLoginView, type OAuthProviderRow } from "@/src/core";
 import { notifySettingsSaved } from "@/components/settings-signal";
 import { SettingsGroup } from "./controls.tsx";
 
@@ -49,12 +49,13 @@ function ProviderRow({ row, onChanged }: { row: OAuthProviderRow; onChanged: () 
 	}, [active, login, poll]);
 
 	// Open the provider's page once per attempt, as soon as the flow has one.
+	const pageUrl = login ? loginPageUrl(login) : undefined;
 	useEffect(() => {
-		if (login?.authUrl && opened.current !== login.loginId) {
+		if (login && pageUrl && opened.current !== login.loginId) {
 			opened.current = login.loginId;
-			window.open(login.authUrl, "_blank", "noopener");
+			window.open(pageUrl, "_blank", "noopener");
 		}
-	}, [login]);
+	}, [login, pageUrl]);
 
 	useEffect(() => {
 		if (login?.status === "done") {
@@ -125,8 +126,8 @@ function ProviderRow({ row, onChanged }: { row: OAuthProviderRow; onChanged: () 
 			{login && !row.signedIn && (
 				<div className="flex flex-col gap-1.5 font-mono text-[11px] text-muted-foreground" data-testid={`subscription-${row.id}-status`}>
 					<span className={login.status === "error" ? "text-destructive" : undefined}>{statusText(login)}</span>
-					{login.authUrl && login.status !== "done" && (
-						<a href={login.authUrl} target="_blank" rel="noreferrer" className="underline hover:text-foreground">
+					{pageUrl && login.status !== "done" && (
+						<a href={pageUrl} target="_blank" rel="noreferrer" className="underline hover:text-foreground">
 							Open the sign-in page again
 						</a>
 					)}
