@@ -19,6 +19,8 @@ import packageMetadata from "../../package.json" with { type: "json" };
 import { chatGPTModel } from "./chatgpt-bridge.ts";
 import { chatGPTStream } from "./chatgpt-stream.ts";
 import type { ChatGPTDispatchLifecycle } from "./chatgpt-request-cycle.ts";
+import { createClaudeCodeProvider } from "./claude-code/provider.ts";
+import { streamClaudeCode } from "./claude-code/stream.ts";
 import { nativeSubscriptionId, nativeSubscriptionModel } from "./subscription-bridge.ts";
 import { nativeSubscriptionStream } from "./subscription-stream.ts";
 
@@ -103,6 +105,7 @@ export function piModels() {
 		collection = createModels({ credentials: credentialProxy, identity: APP_IDENTITY });
 		for (const provider of builtinProviders()) collection.setProvider(provider);
 		collection.setProvider(antigravityProvider());
+		collection.setProvider(createClaudeCodeProvider(streamClaudeCode));
 	}
 	return collection;
 }
