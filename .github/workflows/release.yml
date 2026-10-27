@@ -196,13 +196,13 @@ jobs:
         run: |
           case "$RUNNER_OS" in
             macOS)
-              app="dist/mac-arm64/LearnHarness.app/Contents"
+              app="dist/mac-arm64/MasteryHarness.app/Contents"
               payload="$app/Resources/server/standalone"
-              runtime="$app/MacOS/LearnHarness"
+              runtime="$app/MacOS/MasteryHarness"
               ;;
             Windows)
               payload="dist/win-unpacked/resources/server/standalone"
-              runtime="dist/win-unpacked/LearnHarness.exe"
+              runtime="dist/win-unpacked/MasteryHarness.exe"
               ;;
             Linux)
               payload="dist/linux-unpacked/resources/server/standalone"
