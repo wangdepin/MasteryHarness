@@ -35,8 +35,8 @@ function item(overrides: Partial<ChatListItem>): ChatListItem {
 	};
 }
 
-function render(chat: ChatListItem, active = false) {
-	return renderToStaticMarkup(<SessionRow chat={chat} active={active} onOpen={() => {}} />);
+function render(chat: ChatListItem, active = false, archivedLabel = false) {
+	return renderToStaticMarkup(<SessionRow chat={chat} active={active} onOpen={() => {}} archivedLabel={archivedLabel} />);
 }
 
 describe("SessionRow", () => {
@@ -202,5 +202,22 @@ describe("SessionRow progress ring", () => {
 		const html = render(item({ kind: "practice", progress: null }));
 		assert.match(html, /Practice session/);
 		assert.doesNotMatch(html, /progress-ring/);
+	});
+});
+
+describe("SessionRow — pin / archive", () => {
+	it("a pinned session carries the pin icon; a plain one does not", () => {
+		assert.ok(render(item({ pinnedAt: "2026-02-01T00:00:00.000Z" })).includes('aria-label="Pinned"'));
+		assert.ok(!render(item({})).includes('aria-label="Pinned"'));
+	});
+
+	it("an archived session is labelled only when the row asks for it (search results)", () => {
+		const archived = item({ archivedAt: "2026-02-01T00:00:00.000Z" });
+		assert.ok(render(archived, false, true).includes("Archived · "));
+		assert.ok(!render(archived).includes("Archived"), "inside the Archived group the label would be redundant");
+	});
+
+	it("every row is a walkable session row (the keyboard scroll targets it)", () => {
+		assert.ok(render(item({})).includes("data-session-row"));
 	});
 });

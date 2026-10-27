@@ -5,8 +5,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { MenuShell } from "@/components/menu-shell";
 import { DeleteSessionDialog } from "@/components/delete-session-dialog";
-import type { ChatDeleteMode } from "@/src/core";
-import { DumbbellIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PlusIcon, SearchIcon, SettingsIcon } from "lucide-react";
+import type { ChatDeleteMode, ChatState } from "@/src/core";
+import { ChevronRightIcon, DumbbellIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PinIcon, PlusIcon, SearchIcon, SettingsIcon } from "lucide-react";
 import { ActivitySection } from "@/components/activity-dock";
 import { CoverageMenuBlock } from "@/components/extraction-coverage";
 import { LhMark } from "@/components/lh-mark";
@@ -19,7 +19,7 @@ import { Hint } from "@/components/ui/hint";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { fuzzyScore } from "@/src/core";
+import { groupSessions, withChatState, type SessionKindFilter } from "@/components/session-groups";
 import { useServerEvent, useServerResync } from "@/components/server-events";
 import type { ChatListItem } from "@/src/core";
 import { kbdEventForAction } from "@/src/core";
@@ -289,11 +289,14 @@ export function SessionRow({
 	active,
 	onOpen,
 	kbdSelected = false,
+	archivedLabel = false,
 	onContextMenu,
 }: {
 	chat: ChatListItem;
 	active: boolean;
 	onOpen: () => void;
+	/** Search results mix archived sessions in with the rest — say so. */
+	archivedLabel?: boolean;
 	/** Keyboard-cycle highlight (shortcut wave A: Alt+↑/↓ + Alt+Enter) —
 	 *  visually distinct from the active session, which stays filled. */
 	kbdSelected?: boolean;
@@ -306,6 +309,7 @@ export function SessionRow({
 			onClick={onOpen}
 			onContextMenu={onContextMenu}
 			data-testid={kbdSelected ? "session-row-kbd" : "session-row"}
+			data-session-row=""
 			className={cn(
 				"relative mb-0.5 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left transition-colors hover:bg-accent",
 				active && "bg-accent",
@@ -320,8 +324,9 @@ export function SessionRow({
 				    rule, finally applied to the picker too (owner, typography
 				    round): mono = chrome, Source Sans = human words. */}
 				<span className="block truncate font-prose text-(length:--lh-prose-size)">{chat.title}</span>
-				<span className="block text-xs text-muted-foreground">{sessionMeta(chat)}</span>
+				<span className="block text-xs text-muted-foreground">{archivedLabel ? `Archived · ${sessionMeta(chat)}` : sessionMeta(chat)}</span>
 			</span>
+			{chat.pinnedAt && <PinIcon className="size-3 shrink-0 text-muted-foreground/70" aria-label="Pinned" />}
 			{/* The dumbbell rides the FAR RIGHT (owner round 6, 2026-10-05) —
 			    was left of the name; right-aligned keeps the titles flush with
 			    the teaching rows and reads cleaner. */}
@@ -386,8 +391,9 @@ export function RenameRow({ chat, onCommit, onCancel }: { chat: ChatListItem; on
 /** The three-way kind filter (practice sessions, owner 2026-10-04):
  *  Teaching / All / Practice — a client-side filter over the same
  *  snapshot, persisted in localStorage, defaulting to All. */
-export type SessionKindFilter = "teach" | "all" | "practice";
+export type { SessionKindFilter };
 const KIND_FILTER_KEY = "lh:session-kind-filter";
+const ARCHIVED_OPEN_KEY = "lh:archived-open";
 
 function SessionsSidebar() {
 	const { open, toggle } = useSidebar();
@@ -401,6 +407,23 @@ function SessionsSidebar() {
 	const setFilter = useCallback((f: SessionKindFilter) => {
 		setKindFilter(f);
 		window.localStorage.setItem(KIND_FILTER_KEY, f);
+	}, []);
+	// The Archived group's fold: a per-viewer convenience, folded by default.
+	// Storage can throw (private window, blocked site data) — the group then
+	// just starts folded and forgets.
+	const [archivedOpen, setArchivedOpen] = useState(false);
+	useEffect(() => {
+		try {
+			setArchivedOpen(window.localStorage.getItem(ARCHIVED_OPEN_KEY) === "1");
+		} catch {}
+	}, []);
+	const toggleArchived = useCallback(() => {
+		setArchivedOpen((open) => {
+			try {
+				window.localStorage.setItem(ARCHIVED_OPEN_KEY, open ? "0" : "1");
+			} catch {}
+			return !open;
+		});
 	}, []);
 	const pathname = usePathname();
 	const router = useRouter();
@@ -417,20 +440,12 @@ function SessionsSidebar() {
 	/* FUZZY (owner round 8, 2026-10-05): subsequence match ranked by
 	 * fuzzyScore — prefix beats word-boundary beats scattered. Empty query
 	 * keeps the natural list order (scores are all 0, sort is stable). */
-	const shown = useMemo(() => {
-		const q = query.trim();
-		let list = chats;
-		if (list && kindFilter !== "all") {
-			list = list.filter((c) => (c.kind ?? "teach") === kindFilter);
-		}
-		if (!list) return list;
-		if (!q) return list;
-		return list
-			.map((c) => ({ c, score: fuzzyScore(q, c.title) }))
-			.filter((r): r is { c: (typeof list)[number]; score: number } => r.score !== null)
-			.sort((a, b) => b.score - a.score)
-			.map((r) => r.c);
-	}, [chats, query, kindFilter]);
+	const groups = useMemo(
+		() => (chats ? groupSessions(chats, query, kindFilter, archivedOpen) : null),
+		[chats, query, kindFilter, archivedOpen],
+	);
+	// The rows the keyboard walk cycles, in on-screen order.
+	const shown = groups?.walk ?? null;
 
 	const refreshInFlightRef = useRef(false);
 	const refresh = useCallback(async () => {
@@ -550,12 +565,33 @@ function SessionsSidebar() {
 	const ctxAnchorRef = useRef<HTMLElement | null>(null);
 	const [renamingId, setRenamingId] = useState<string | null>(null);
 	const [deleting, setDeleting] = useState<ChatListItem | null>(null);
+	const ctxChat = ctxChatId === null ? undefined : chats?.find((c) => c.id === ctxChatId);
 
 	const openContext = (e: React.MouseEvent<HTMLButtonElement>, chat: ChatListItem) => {
 		e.preventDefault(); // suppress the native menu
 		ctxAnchorRef.current = e.currentTarget;
 		setCtxChatId(chat.id);
 	};
+
+	// One row of any group. The walk index is the row's place among the rows
+	// the keyboard cycles (`shown`), so it is the same in every group.
+	const renderRow = (c: ChatListItem) =>
+		renamingId === c.id ? (
+			<RenameRow key={c.id} chat={c} onCommit={(next) => void commitRename(c.id, next)} onCancel={() => setRenamingId(null)} />
+		) : (
+			<SessionRow
+				key={c.id}
+				chat={c}
+				active={pathname === `/chat/${c.id}`}
+				kbdSelected={shown?.indexOf(c) === kbdIndex}
+				archivedLabel={groups?.searching === true && !!c.archivedAt}
+				onOpen={() => {
+					setKbdIndex(null);
+					router.push(`/chat/${c.id}`);
+				}}
+				onContextMenu={(e) => openContext(e, c)}
+			/>
+		);
 
 	// The menu contract (agent-section's): any pointerdown outside the menu
 	// or its row closes it; Esc is CLAIMED so it never also aborts a turn
@@ -605,6 +641,27 @@ function SessionsSidebar() {
 		}
 	}, []);
 
+	// Pin / archive: patch the snapshot instantly (the move is cheap and the
+	// server is the authority — chats-changed refetches), and refetch on a
+	// failed write so the list never keeps a move that did not land.
+	const setChatState = useCallback(
+		async (id: string, state: ChatState) => {
+			setChats((prev) => (prev ? prev.map((c) => (c.id === id ? withChatState(c, state) : c)) : prev));
+			try {
+				const res = await fetch(`/api/chats/${id}/state`, {
+					method: "PUT",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ state }),
+				});
+				if (!res.ok) throw new Error(`state change failed: ${res.status}`);
+			} catch (err) {
+				console.error("state change failed:", err);
+				void refresh();
+			}
+		},
+		[refresh],
+	);
+
 	// Delete success: patch the list instantly (the poll is the backstop),
 	// navigate home if the open session died (the chat view unmounts —
 	// drafts die with it, no orphan bubbles), and announce the graph
@@ -631,11 +688,11 @@ function SessionsSidebar() {
 		return () => window.removeEventListener("lh:kbd-sessions-search", onFocusSearch);
 	}, [open, toggle]);
 
-	// Keep the kbd-selected row in view (the rows are the container's only
-	// buttons, so the index matches).
+	// Keep the kbd-selected row in view (the group fold button is not a row,
+	// so the walk index is matched against the session rows only).
 	useEffect(() => {
 		if (kbdIndex === null) return;
-		listRef.current?.querySelectorAll("button")[kbdIndex]?.scrollIntoView({ block: "nearest" });
+		listRef.current?.querySelectorAll("[data-session-row]")[kbdIndex]?.scrollIntoView({ block: "nearest" });
 	}, [kbdIndex]);
 
 	useEffect(() => {
@@ -808,39 +865,44 @@ function SessionsSidebar() {
 				</div>
 
 				<div ref={listRef} className="flex-1 overflow-y-auto p-2">
-					{shown === null ? (
+					{groups === null ? (
 						<div className="px-2 py-4 text-xs text-muted-foreground">Loading…</div>
-					) : shown.length === 0 ? (
+					) : groups.pinned.length + groups.main.length + groups.archived.length === 0 ? (
 						<div className="px-2 py-4 text-xs text-muted-foreground">
 							{query.trim() ? "No sessions match." : "No sessions yet."}
 						</div>
 					) : (
-						shown.map((c, i) =>
-							renamingId === c.id ? (
-								<RenameRow
-									key={c.id}
-									chat={c}
-									onCommit={(next) => void commitRename(c.id, next)}
-									onCancel={() => setRenamingId(null)}
-								/>
-							) : (
-								<SessionRow
-									key={c.id}
-									chat={c}
-									active={pathname === `/chat/${c.id}`}
-									kbdSelected={i === kbdIndex}
-									onOpen={() => {
-										setKbdIndex(null);
-										router.push(`/chat/${c.id}`);
-									}}
-									onContextMenu={(e) => openContext(e, c)}
-								/>
-							),
-						)
+						<>
+							{groups.pinned.length > 0 && (
+								<>
+									<div className="px-3 pb-1 pt-0.5 text-[11px] uppercase tracking-wider text-muted-foreground/70" data-testid="group-pinned">
+										Pinned
+									</div>
+									{groups.pinned.map(renderRow)}
+									{groups.main.length > 0 && <div className="mx-2 mb-1.5 mt-1 border-t border-border/60" aria-hidden="true" />}
+								</>
+							)}
+							{groups.main.map(renderRow)}
+							{groups.archived.length > 0 && (
+								<>
+									<button
+										type="button"
+										data-testid="group-archived-toggle"
+										aria-expanded={archivedOpen}
+										onClick={toggleArchived}
+										className="mt-1 flex w-full items-center gap-1.5 rounded-md px-3 py-1.5 text-left text-[11px] uppercase tracking-wider text-muted-foreground/70 transition-colors hover:text-foreground"
+									>
+										<ChevronRightIcon className={cn("size-3 transition-transform", archivedOpen && "rotate-90")} />
+										Archived ({groups.archived.length})
+									</button>
+									{archivedOpen && groups.archived.map(renderRow)}
+								</>
+							)}
+						</>
 					)}
 				</div>
 
-					{/* Background agents (owner, sidebar round): the section is
+				{/* Background agents (owner, sidebar round): the section is
 					    ALWAYS here — empty means empty (the header sits alone); it
 					    populates and grows when processes run. The session list is
 					    flex-1, so this pins to the bottom. Sidebar closed = the
@@ -892,6 +954,33 @@ function SessionsSidebar() {
 							className="flex items-center rounded-lg px-2.5 py-1.5 text-left text-foreground transition-colors hover:bg-accent"
 						>
 							Rename
+						</button>
+						{/* Pin / archive (2026-10): exclusive states, so the labels read the
+						    CURRENT state — pinning an archived session moves it out of the
+						    archive, archiving a pinned one drops the pin. */}
+						<button
+							type="button"
+							data-testid="ctx-pin"
+							onClick={() => {
+								const id = ctxChatId;
+								setCtxChatId(null);
+								void setChatState(id, ctxChat?.pinnedAt ? "normal" : "pinned");
+							}}
+							className="flex items-center rounded-lg px-2.5 py-1.5 text-left text-foreground transition-colors hover:bg-accent"
+						>
+							{ctxChat?.pinnedAt ? "Unpin" : "Pin"}
+						</button>
+						<button
+							type="button"
+							data-testid="ctx-archive"
+							onClick={() => {
+								const id = ctxChatId;
+								setCtxChatId(null);
+								void setChatState(id, ctxChat?.archivedAt ? "normal" : "archived");
+							}}
+							className="flex items-center rounded-lg px-2.5 py-1.5 text-left text-foreground transition-colors hover:bg-accent"
+						>
+							{ctxChat?.archivedAt ? "Unarchive" : "Archive"}
 						</button>
 						{/* Export as Markdown (owner, release polish 2026-10-06): the
 					    session-markdown engine's user-facing debut — same-origin

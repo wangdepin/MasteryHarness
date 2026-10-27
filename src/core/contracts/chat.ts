@@ -27,12 +27,22 @@ import type { EmissionStats } from "./graph.ts";
  *  practice agent, its two tools, no extraction, no graph writes. */
 export type ChatKind = "teach" | "practice";
 
+/** A session's place in the sidebar — exactly one at a time. Stored as the
+ *  two timestamps below (absent = not set); `normal` is neither. */
+export type ChatState = "normal" | "pinned" | "archived";
+export const CHAT_STATES: readonly ChatState[] = ["normal", "pinned", "archived"];
+
 export interface ChatRecord {
 	id: string;
 	title: string;
 	createdAt: string;
 	updatedAt: string;
 	messages: LhMessage[];
+	/** Pinned to the top of the sidebar. Never set together with archivedAt. */
+	pinnedAt?: string;
+	/** Archived: folded away at the bottom of the sidebar, not deleted. A new
+	 *  user message clears it (the session is back in use). */
+	archivedAt?: string;
 	/** The session's kind — absent = teach (pre-practice records). */
 	kind?: ChatKind;
 	/** The session's plan tree (vision §2) — written by plan tools via saveTree. */
@@ -263,6 +273,9 @@ export interface ChatSummary {
 	updatedAt: string;
 	/** Normalized kind (absent record field reads as teach). */
 	kind: ChatKind;
+	/** See ChatRecord.pinnedAt / archivedAt — both ride the list payload. */
+	pinnedAt?: string;
+	archivedAt?: string;
 	messageCount: number;
 	/** The session's current phase, derived from the stored plan tree. */
 	phase: Phase3;

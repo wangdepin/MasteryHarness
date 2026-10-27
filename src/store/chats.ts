@@ -12,7 +12,7 @@ import * as path from "node:path";
 import { PATHS } from "../../config.ts";
 import { emit } from "../core/events.ts";
 import type { ChatStore } from "../core/ports.ts";
-import type { ChatRecord, ChatSettings, ChatSummary, ExtractionRunUsage, PlanTree, TurnUsage } from "../core/contracts.ts";
+import type { ChatRecord, ChatSettings, ChatState, ChatSummary, ExtractionRunUsage, PlanTree, TurnUsage } from "../core/contracts.ts";
 import { CURRENT_CHAT_VERSION } from "../core/contracts.ts";
 import type { LhMessage } from "../core/native-messages.ts";
 import { activeProblemOf, danglingQuestionOf } from "../core/native-messages.ts";
@@ -25,7 +25,7 @@ function chatFile(id: string): string {
 }
 
 /** THE SILENCE LAW (push S6, 2026-10-02): chats-changed announces ONLY
- *  list-SHAPE mutations — createChat, renameChat, deleteChat (below,
+ *  list-SHAPE mutations — createChat, renameChat, setChatState, deleteChat (below,
  *  each emits post-write). The content writers (saveMessages,
  *  appendTurnUsage, appendExtractionUsage, saveSettings, saveTree) are
  *  DELIBERATELY SILENT: saveMessages fires per turn-persist and would
@@ -130,6 +130,10 @@ function listChats(): ChatSummary[] {
 function saveMessages(id: string, messages: LhMessage[]): void {
 	const record = getChat(id);
 	if (!record) throw new Error(`Chat not found: ${id}`);
+	// A new learner message means the session is back in use: an archived
+	// session leaves the archive. Only a user message counts — a background
+	// delivery or agent reply must not pull it out.
+	if (record.archivedAt && messages.slice(record.messages.length).some((m) => m.role === "user")) delete record.archivedAt;
 	record.messages = messages;
 	record.updatedAt = new Date().toISOString();
 	writeChat(record);
@@ -185,6 +189,24 @@ function renameChat(id: string, title: string): ChatRecord {
 	return record;
 }
 
+/** Move a session between normal / pinned / archived (2026-10). Not
+ *  conversation activity, so updatedAt stays put and the sidebar order never
+ *  churns. The three states are exclusive: each branch writes its own
+ *  timestamp and clears the other. Announced like a rename — the sidebar's
+ *  groups change shape. */
+function setChatState(id: string, state: ChatState): ChatRecord {
+	const record = getChat(id);
+	if (!record) throw new Error(`Chat not found: ${id}`);
+	const now = new Date().toISOString();
+	delete record.pinnedAt;
+	delete record.archivedAt;
+	if (state === "pinned") record.pinnedAt = now;
+	if (state === "archived") record.archivedAt = now;
+	writeChat(record);
+	emit("chats-changed", {});
+	return record;
+}
+
 /** Delete the session record file entirely (session-deletion wave 6,
  *  owner 2026-09-22). False when the id is unknown — the route turns that
  *  into a 404. The record's graph traces and jobs are the route's
@@ -217,6 +239,7 @@ export const chatStore: ChatStore = {
 	saveTree,
 	saveSettings,
 	renameChat,
+	setChatState,
 	deleteChat,
 	appendTurnUsage,
 	appendExtractionUsage,
