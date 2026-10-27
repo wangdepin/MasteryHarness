@@ -22,13 +22,16 @@ MasteryHarness uses AI agents to plan and teach lessons from your current unders
 
 - **Review: spaced repetition for what you have learned.** A Review page in the sidebar lists the propositions whose recall is due, scheduled by FSRS-6 from your practice results. Pick some, start a review, and the next practice session is built around them. [Details below](#review).
 - **Code exercises.** The teacher can pose a Python exercise in the dock: you write code, run it in the app (a bundled Pyodide runtime, no network needed), and submit only after running the current code. A "Your thinking" field carries your reasoning to the teacher.
-- **Sign in with a subscription instead of an API key.** Use your ChatGPT, Claude, GitHub Copilot, Grok, or Google subscription. Copilot shows only the models your plan includes (github.com accounts; GitHub Enterprise is not supported). Google sign-in goes through Antigravity, which offers Gemini, Claude, and GPT-OSS models; its models appear in the picker once you are signed in.
+- **Sign in with a subscription instead of an API key.** Use your ChatGPT, Claude, GitHub Copilot, Grok, or Google subscription. In the desktop app, ChatGPT, GitHub Copilot, and Grok connect from the Subscriptions section of Settings → Keys; Copilot and Grok show a device code and an Open browser button to finish the sign-in. Which Copilot models you see follows your account's and organization's policy. Claude and Google sign-in are listed below it; Google goes through Antigravity, which offers Gemini, Claude, and GPT-OSS models, and its models appear in the picker once you are signed in.
+- **Claude Code as a model provider.** If the `claude` CLI is installed and signed in, `claude-code` appears in the model picker with opus, sonnet, and haiku, billed to your Claude subscription instead of an API key. Each turn runs `claude -p` in an isolated, tool-less directory, and the harness's own tools are handed to it over a loopback-only MCP server. This comes from [upstream PR #61](https://github.com/amosblomqvist/learnharness/pull/61), which is still open upstream. A packaged app starts with a short `PATH`; if the picker does not list `claude-code`, the CLI was not found.
+- **Pin and archive sessions.** Right-click a session to pin it: pinned sessions stay in a Pinned group at the top of the list whatever the Teaching / Practice / All filter says. Archive a finished session and it folds into an "Archived (n)" group at the bottom, still found by search. Sending a message to an archived session brings it back.
 - **Sentence reader.** Read teaching text sentence by sentence, with optional read-aloud through ElevenLabs.
 - **Quote while you read.** Selecting teaching prose quotes it into "Thinking while reading" automatically, including in prediction questions.
 - **Light theme.** A light theme and a System mode in appearance settings. The plan map follows the theme.
 - **Copy formulas as TeX.** Copy any rendered KaTeX formula back out as TeX source.
 - **Answer fields.** Cmd+Enter submits; Enter inserts a newline.
-- **Packaging and fixes.** The packaged server ships pi-ai's OAuth flow modules, the researcher gets a wrap-up turn when it spends every turn on tools, literal `\n` in questions and one-line code fences renders correctly, and `pi-ai` / `pi-agent-core` are bumped to 1.3.0.
+- **Packaging and fixes.** The packaged server ships pi-ai's OAuth flow modules, the researcher gets a wrap-up turn when it spends every turn on tools, and literal `\n` in questions and one-line code fences renders correctly.
+- **A new app icon.** The M graph mark, redrawn as vector for the macOS Liquid Glass icon, the Windows and Linux icons, and the sidebar.
 
 Everything else behaves as in upstream. See the [commit history](https://github.com/wangdepin/MasteryHarness/commits/main) for the exact changes.
 
@@ -96,7 +99,7 @@ Want the official app? Download LearnHarness from [learnharness.ai](https://lear
 
 ## Relationship to upstream
 
-MasteryHarness tracks [LearnHarness](https://github.com/amosblomqvist/learnharness) and last merged upstream 0.3.2. Credit for the original app goes to Amos Blomqvist. Model access is built on [pi-ai](https://github.com/earendil-works/pi).
+MasteryHarness tracks [LearnHarness](https://github.com/amosblomqvist/learnharness) and last merged upstream 0.3.8. Credit for the original app goes to Amos Blomqvist. Model access is built on [pi-ai](https://github.com/earendil-works/pi).
 
 ## License
 
