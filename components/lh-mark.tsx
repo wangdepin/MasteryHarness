@@ -1,42 +1,29 @@
 /**
- * LhMark — the app mark (owner's icon-no-padding.svg, 2026-09-17), inlined
- * as JSX so it rides along with the components (no network fetch, recolorable,
- * crisp at any size). 806×806 viewBox, no padding: sizing/padding is the
- * consumer's job. The gray path is the harness spiral; the white ring is
- * the mark's own stroke on dark backgrounds.
+ * LhMark — the app mark: the M graph (rings joined by bars, a white and an
+ * amber end node), the same drawing as the app icon (build/icon-flat.svg).
+ * Inlined as JSX so it rides along with the components (no network fetch,
+ * crisp at any size). The viewBox is cropped tight around the glyph, no
+ * padding: sizing/padding is the consumer's job. The M follows the text
+ * colour (white on the dark theme, black on the light one); only the amber
+ * node keeps its own colour.
  *
- * Replaces the "LH" wordmark text in the sidebar band (also the traffic-light
- * gutter's resident in the merged desktop chrome).
+ * It is the "LH" wordmark's successor in the sidebar band (also the
+ * traffic-light gutter's resident in the merged desktop chrome).
  */
 export function LhMark({ className = "" }: { className?: string }) {
 	return (
-		<svg
-			viewBox="0 0 806 806"
-			className={className}
-			style={{ fillRule: "evenodd", clipRule: "evenodd", strokeLinejoin: "round", strokeMiterlimit: 2 }}
-			aria-hidden="true"
-		>
-			<g transform="matrix(1,0,0,1,-109.002299,-109.002299)">
-				<g transform="matrix(0.939904,0,0,0.939904,30.769428,30.766742)">
-					<g transform="matrix(-0.232199,0,0,0.232199,1384.403797,-416.791824)">
-						<g transform="matrix(0.573992,-2.142166,2.142166,0.573992,-5516.07298,4432.117471)">
-							<path
-								d="M1234.728,3305.937C871.642,3324.965 587,3624.915 587,3988.5C587,4365.734 893.266,4672 1270.5,4672C1647.734,4672 1954,4365.734 1954,3988.5C1954,3880.637 1928.472,3774.304 1879.503,3678.197L1794.243,3721.64C1836.356,3804.292 1858.31,3895.737 1858.31,3988.5C1858.31,4312.921 1594.921,4576.31 1270.5,4576.31C946.079,4576.31 682.69,4312.921 682.69,3988.5C682.69,3675.817 927.482,3417.86 1239.736,3401.496L1234.728,3305.937Z"
-								style={{ fill: "rgb(148,148,148)" }}
-							/>
-						</g>
-						<g transform="matrix(1.261034,-0,-0,1.261034,1170.373407,-2014.261188)">
-							<path
-								d="M1270.5,3305C893.266,3305 587,3611.266 587,3988.5C587,4365.734 893.266,4672 1270.5,4672C1647.734,4672 1954,4365.734 1954,3988.5C1954,3611.266 1647.734,3305 1270.5,3305ZM1270.5,3471.537C1555.819,3471.537 1787.463,3703.181 1787.463,3988.5C1787.463,4273.819 1555.819,4505.463 1270.5,4505.463C985.181,4505.463 753.537,4273.819 753.537,3988.5C753.537,3703.181 985.181,3471.537 1270.5,3471.537Z"
-								style={{ fill: "#fff" }}
-							/>
-						</g>
-						<g transform="matrix(1.261034,0,-0,1.261034,3139.627182,-45.007413)">
-							<circle cx="1270.5" cy="3988.5" r="683.5" style={{ fill: "#fff" }} />
-						</g>
-					</g>
-				</g>
+		<svg viewBox="185 213 657 609" className={className} aria-hidden="true">
+			<g fill="currentColor">
+				<path d="M237 352H287V742H237Z"/>
+				<path d="M737 352H787V742H737Z"/>
+				<path d="M285.78 352.48L451.53 531.49L488.22 497.52L322.47 318.51Z"/>
+				<path d="M701.53 318.51L535.78 497.52L572.47 531.49L738.22 352.48Z"/>
+				<path fillRule="evenodd" d="M185 290a77 77 0 1 0 154 0a77 77 0 1 0 -154 0ZM215 290a47 47 0 1 1 94 0a47 47 0 1 1 -94 0Z"/>
+				<path fillRule="evenodd" d="M685 290a77 77 0 1 0 154 0a77 77 0 1 0 -154 0ZM715 290a47 47 0 1 1 94 0a47 47 0 1 1 -94 0Z"/>
+				<path fillRule="evenodd" d="M435 560a77 77 0 1 0 154 0a77 77 0 1 0 -154 0ZM465 560a47 47 0 1 1 94 0a47 47 0 1 1 -94 0Z"/>
+				<circle cx="262" cy="742" r="72"/>
 			</g>
+			<circle cx="762" cy="742" r="80" fill="#f5b83d" />
 		</svg>
 	);
 }
