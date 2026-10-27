@@ -1,6 +1,10 @@
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+	catalogContextLimits,
 	catalogDefaultsFor,
 	catalogProviders,
 	catalogRolePins,
@@ -337,5 +341,72 @@ describe("sign-in-only providers (Antigravity)", () => {
 		assert.equal(row!.keyPresent, false);
 		assert.ok(!modelCatalog().models.some((m) => m.provider === "antigravity"));
 		assert.equal(providerKeyPresent("antigravity"), false);
+	});
+});
+
+/** Runs fn with PATH and HOME pointed at a temp dir, so the CLI lookup only
+ *  finds a claude binary when installed is true. */
+function withClaudeInstalled(installed: boolean, fn: () => void): void {
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "claude-catalog-"));
+	const saved = { PATH: process.env.PATH, HOME: process.env.HOME, npm_config_prefix: process.env.npm_config_prefix };
+
+	if (installed) fs.writeFileSync(path.join(dir, "claude"), "#!/bin/sh\n", { mode: 0o755 });
+	process.env.PATH = dir;
+	process.env.HOME = dir;
+	delete process.env.npm_config_prefix;
+
+	try {
+		fn();
+	} finally {
+		for (const [name, value] of Object.entries(saved)) {
+			if (value === undefined) delete process.env[name];
+			else process.env[name] = value;
+		}
+		fs.rmSync(dir, { recursive: true, force: true });
+	}
+}
+
+describe("the claude-code provider (subscription CLI, no key)", () => {
+	it("modelCatalog() lists claude-code opus/sonnet/haiku when the CLI is installed", () => {
+		withClaudeInstalled(true, () => {
+			const ids = modelCatalog()
+				.models.filter((m) => m.provider === "claude-code")
+				.map((m) => m.id);
+			assert.deepEqual(ids, ["haiku", "opus", "sonnet"]);
+		});
+	});
+
+	it("catalogProviders() marks claude-code present when the CLI is installed", () => {
+		withClaudeInstalled(true, () => {
+			const row = catalogProviders().find((p) => p.id === "claude-code");
+			assert.deepEqual(row, { id: "claude-code", envVar: "", keyPresent: true });
+		});
+	});
+
+	it("catalogProviders() marks claude-code absent and modelCatalog() hides it when the CLI is missing", () => {
+		withClaudeInstalled(false, () => {
+			const row = catalogProviders().find((p) => p.id === "claude-code");
+			assert.equal(row?.keyPresent, false);
+			assert.equal(
+				modelCatalog().models.some((m) => m.provider === "claude-code"),
+				false,
+			);
+		});
+	});
+
+	it("catalogContextLimits() has claude-code:opus when the CLI is installed", () => {
+		withClaudeInstalled(true, () => {
+			assert.ok((catalogContextLimits().get("claude-code:opus") ?? 0) > 0);
+		});
+	});
+
+	it('piEngineForSpec({ provider: "claude-code", id: "sonnet" }) resolves', () => {
+		const engine = piEngineForSpec({ provider: "claude-code", id: "sonnet" });
+		assert.equal(engine.model.provider, "claude-code");
+		assert.equal(engine.model.id, "sonnet");
+	});
+
+	it('providerKeyPresent("claude-code") is true', () => {
+		assert.equal(providerKeyPresent("claude-code"), true);
 	});
 });

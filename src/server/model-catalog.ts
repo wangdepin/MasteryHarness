@@ -50,6 +50,8 @@ import type {
 import type { EffectiveModelSpec, EffectiveSlot } from "../core/settings-resolution.ts";
 import { AUTH_PROVIDER_KEYS } from "../core/auth-keys.ts";
 import { SUBSCRIPTION_PROVIDERS } from "../core/oauth-login.ts";
+import { getClaudeBinary } from "../agent/claude-code/binary.ts";
+import { CLAUDE_CODE_PROVIDER } from "../agent/claude-code/constants.ts";
 import { BACKGROUND_MODEL_ROLES, MODEL_SLOTS, type BackgroundModelRole, type ModelSlotName, type ModelsSettings } from "../core/settings.ts";
 
 /** The picker's client-safe model entry (contract: core/contracts/models.ts). */
@@ -153,6 +155,7 @@ export function catalogProviders(): CatalogProvider[] {
 		...keyed,
 		...signInOnly,
 		{ id: "chatgpt", envVar: "", keyPresent: chatGPTConnected() },
+		{ id: CLAUDE_CODE_PROVIDER, envVar: "", keyPresent: getClaudeBinary() !== null },
 		...NATIVE_SUBSCRIPTIONS.map((p) => ({ id: p.logicalId, envVar: "", keyPresent: nativeSubscriptionConnected(p.providerId) })),
 	].sort((a, b) => a.id.localeCompare(b.id));
 }
