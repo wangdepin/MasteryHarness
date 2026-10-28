@@ -7,7 +7,9 @@
   <a href="#review">Review</a> ·
   <a href="#how-it-works">How it works</a> ·
   <a href="#install">Install</a> ·
-  <a href="https://github.com/wangdepin/MasteryHarness/issues">Issues</a>
+  <a href="docs/development.md">Documentation</a> ·
+  <a href="https://github.com/wangdepin/MasteryHarness/issues">Issues</a> ·
+  <a href="https://discord.gg/5tCHHQEB2e">Discord</a>
 </p>
 
 > MasteryHarness is a fork of LearnHarness by Amos Blomqvist and tracks its main branch. It is not affiliated with or endorsed by the upstream project. The teaching engine, knowledge graph, and most of the app are upstream's work; the changes listed below are this fork's.
