@@ -1,4 +1,4 @@
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { type ChildProcessWithoutNullStreams } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -16,25 +16,28 @@ import {
 	type StopReason,
 	type StreamFunction,
 	type ThinkingLevel,
-	type Tool,
 	type ToolCall,
 	type ToolResultMessage,
 	type TranscriptContext,
-	validateToolCall,
 } from "@earendil-works/pi-ai";
 import type { AnthropicEffort } from "@earendil-works/pi-ai/api/anthropic-messages";
 import { parseStreamingJson, parseToolCallArguments } from "@earendil-works/pi-ai/utils/json-parse";
 
-import { getClaudeBinary } from "./binary.ts";
+import { externalCliEnv } from "../../core/auth-env.ts";
+import type { LhMessage } from "../../core/native-messages.ts";
+import { ClaudeLaunchError, createClaudeLauncher } from "./launch.ts";
 import { parseCliLine, type CliBlock, type CliEvent, type CliUsage } from "./cli-events.ts";
 import { ClaudeCodeError } from "./constants.ts";
+import { ContextWindowProbe } from "./context-window.ts";
 import { addLiveProcess, getLiveProcess, removeLiveProcess, type LiveProcess } from "./live-processes.ts";
-import { createToolBridge, toolNameFromMcp, type PendingToolCall, type ToolBridge } from "./tool-bridge.ts";
+import { configurationForReuse, conversationForReuse } from "./reuse-context.ts";
+import { BRIDGE_SERVER_NAME, createToolBridge, toolNameFromMcp, type PendingToolCall, type ToolBridge } from "./tool-bridge.ts";
 import { toClaudeInput, toStreamJsonLine } from "./transcript.ts";
 
-type RunClaudeOptions = { cwd: string; env: NodeJS.ProcessEnv };
+type RunClaudeOptions = { cwd: string; env: NodeJS.ProcessEnv; signal?: AbortSignal };
 
-export type RunClaude = (args: string[], options: RunClaudeOptions) => ChildProcessWithoutNullStreams | null;
+type ClaudeChild = ChildProcessWithoutNullStreams | null;
+export type RunClaude = (args: string[], options: RunClaudeOptions) => ClaudeChild | Promise<ClaudeChild>;
 
 // A held MCP call lasts until pi calls back with the tool result, which for a question tool is
 // whenever the learner answers; this must outlast the live-process idle timeout so the CLI never
@@ -100,7 +103,9 @@ export function toClaudeArgs(input: ClaudeArgsInput): string[] {
 		"--mcp-config",
 		input.mcpConfigFile,
 		"--setting-sources",
-		"",
+		"user",
+		"--settings",
+		JSON.stringify({ disableAllHooks: true }),
 		"--disable-slash-commands",
 		"--no-session-persistence",
 		"--permission-prompts",
@@ -134,9 +139,11 @@ function getAssistantErrorMessage(error: string, text: string): string {
 }
 
 class ClaudeTurn {
-	private readonly output: AssistantMessage;
+	private readonly output: AssistantMessage & Pick<LhMessage, "cliContextWindow">;
 	private readonly contentIndexes = new Map<number, number>();
 	private readonly partialJson = new Map<number, string>();
+	private readonly toolBlocks = new Map<number, ToolCall>();
+	private readonly intents: ToolCall[] = [];
 	started = false;
 	finished = false;
 
@@ -188,13 +195,12 @@ class ClaudeTurn {
 				const found = this.getBlock(event.index);
 				if (!found) return;
 
-				const { contentIndex, block } = found;
+				const { block } = found;
 				if (block.type !== "toolCall") return;
 
 				const partialJson = (this.partialJson.get(event.index) ?? "") + event.partialJson;
 				this.partialJson.set(event.index, partialJson);
 				block.arguments = parseStreamingJson(partialJson);
-				this.stream.push({ type: "toolcall_delta", contentIndex, delta: event.partialJson, partial: this.output });
 				return;
 			}
 
@@ -208,7 +214,9 @@ class ClaudeTurn {
 				return;
 
 			case "messageStop":
-				this.finish();
+				// Tool intent is not execution admission. The process publishes only
+				// calls that actually reach the authenticated MCP bridge.
+				if (this.output.stopReason !== "toolUse") this.finish();
 				return;
 
 			case "assistantError":
@@ -221,10 +229,26 @@ class ClaudeTurn {
 		}
 	}
 
-	getToolCalls(): ToolCall[] {
-		if (!this.finished || this.output.stopReason !== "toolUse") return [];
+	get waitingForAdmission(): boolean { return !this.finished && this.output.stopReason === "toolUse"; }
 
-		return this.output.content.filter((block) => block.type === "toolCall");
+	getIntents(): ToolCall[] { return this.intents; }
+
+	getMessage(): AssistantMessage { return this.output; }
+
+	setContextWindow(tokens: number | undefined): void {
+		if (!this.finished && tokens !== undefined) this.output.cliContextWindow = tokens;
+	}
+
+	admit(calls: ToolCall[]): void {
+		this.start();
+		for (const call of calls) {
+			const contentIndex = this.output.content.length;
+			this.output.content.push(call);
+			this.stream.push({ type: "toolcall_start", contentIndex, partial: this.output });
+			this.stream.push({ type: "toolcall_end", contentIndex, toolCall: call, partial: this.output });
+		}
+		this.output.stopReason = "toolUse";
+		this.finish();
 	}
 
 	fail(message: string, reason: "aborted" | "error"): void {
@@ -260,13 +284,18 @@ class ClaudeTurn {
 				return;
 
 			case "toolUse":
-				this.output.content.push({ type: "toolCall", id: block.id, name: toolNameFromMcp(block.name), arguments: {} });
-				this.stream.push({ type: "toolcall_start", contentIndex, partial: this.output });
+				if (!block.name.startsWith(`mcp__${BRIDGE_SERVER_NAME}__`)) {
+					this.fail("claude CLI emitted an unsupported native tool call", "error");
+					return;
+				}
+				this.toolBlocks.set(index, { type: "toolCall", id: block.id, name: toolNameFromMcp(block.name), arguments: {} });
 				return;
 		}
 	}
 
 	private getBlock(index: number): { contentIndex: number; block: AssistantMessage["content"][number] } | null {
+		const tool = this.toolBlocks.get(index);
+		if (tool) return { contentIndex: -1, block: tool };
 		const contentIndex = this.contentIndexes.get(index);
 		if (contentIndex === undefined) return null;
 
@@ -293,7 +322,8 @@ class ClaudeTurn {
 			case "toolCall":
 				Object.assign(block, parseToolCallArguments(this.partialJson.get(index) ?? ""));
 				this.partialJson.delete(index);
-				this.stream.push({ type: "toolcall_end", contentIndex, toolCall: block satisfies ToolCall, partial: this.output });
+				this.toolBlocks.delete(index);
+				this.intents.push(block);
 				return;
 		}
 	}
@@ -340,51 +370,52 @@ type TurnFiles = { cwd: string; privateDir: string; systemPromptFile: string; mc
 
 async function createTurnFiles(systemPrompt: string, mcpConfig: string): Promise<TurnFiles> {
 	const cwd = await mkdtemp(join(tmpdir(), "claude-code-cwd-"));
-	const privateDir = await mkdtemp(join(tmpdir(), "claude-code-private-"));
-
-	const systemPromptFile = join(privateDir, "system-prompt.md");
-	const mcpConfigFile = join(privateDir, "mcp.json");
-
-	await writeFile(systemPromptFile, systemPrompt, { mode: PRIVATE_FILE_MODE });
-	await writeFile(mcpConfigFile, mcpConfig, { mode: PRIVATE_FILE_MODE });
-
-	return { cwd, privateDir, systemPromptFile, mcpConfigFile };
-}
-
-async function removeTurnResources(bridge: ToolBridge, files: TurnFiles): Promise<void> {
-	await bridge.close();
-	await rm(files.cwd, { recursive: true, force: true });
-	await rm(files.privateDir, { recursive: true, force: true });
-}
-
-type UnansweredToolCall = { toolCall: ToolCall; result: ToolResultMessage };
-
-// The CLI answers calls to undeclared tools or with invalid arguments itself, without reaching the bridge.
-function isValidToolCall(tools: Tool[], toolCall: ToolCall): boolean {
+	let privateDir: string | undefined;
 	try {
-		validateToolCall(tools, toolCall);
-		return true;
-	} catch {
-		return false;
+		privateDir = await mkdtemp(join(tmpdir(), "claude-code-private-"));
+		const systemPromptFile = join(privateDir, "system-prompt.md");
+		const mcpConfigFile = join(privateDir, "mcp.json");
+		await writeFile(systemPromptFile, systemPrompt, { mode: PRIVATE_FILE_MODE });
+		await writeFile(mcpConfigFile, mcpConfig, { mode: PRIVATE_FILE_MODE });
+		return { cwd, privateDir, systemPromptFile, mcpConfigFile };
+	} catch (error) {
+		await Promise.all([rm(cwd, { recursive: true, force: true }), ...(privateDir ? [rm(privateDir, { recursive: true, force: true })] : [])]);
+		throw error;
 	}
 }
 
-function isSameToolCall(toolCall: ToolCall, call: PendingToolCall): boolean {
-	return toolCall.name === call.name && isDeepStrictEqual(toolCall.arguments, call.arguments);
+async function removeTurnResources(bridge: ToolBridge, files: TurnFiles): Promise<void> {
+	await Promise.all([
+		bridge.close(),
+		rm(files.cwd, { recursive: true, force: true }),
+		rm(files.privateDir, { recursive: true, force: true }),
+	]);
 }
 
 class ClaudeProcess implements LiveProcess {
 	toolCallIds: string[] = [];
 	private stderr = "";
 	private closed = false;
+	private stopping = false;
+	private killTimer: NodeJS.Timeout | undefined;
 	private signal: AbortSignal | undefined;
+	private sourceCalls: ToolCall[] = [];
+	private sourceComplete = false;
+	private admitted: PendingToolCall[] = [];
+	private readonly cancelledIds = new Set<string>();
+	private pendingError: string | undefined;
+	private contextWindow: number | undefined;
+	private contextProbe: ContextWindowProbe | undefined;
 
 	constructor(
 		private readonly child: ChildProcessWithoutNullStreams,
 		private readonly bridge: ToolBridge,
 		private readonly files: TurnFiles,
-		private readonly tools: Tool[],
 		private turn: ClaudeTurn,
+		readonly owner: symbol,
+		readonly sessionId: string | undefined,
+		private readonly configuration: unknown,
+		private conversation: unknown[],
 	) {}
 
 	start(stdinLine: string, signal: AbortSignal | undefined): void {
@@ -394,39 +425,107 @@ class ClaudeProcess implements LiveProcess {
 			this.turn.fail(START_FAILED_MESSAGE, "error");
 			this.handleClose(START_FAILED_MESSAGE);
 		});
-
 		this.child.stderr.setEncoding("utf8");
-		this.child.stderr.on("data", (chunk: string) => (this.stderr += chunk));
-
+		this.child.stderr.on("data", (chunk: string) => { this.stderr = (this.stderr + chunk).slice(-65_536); });
 		this.child.stdin.on("error", (error) => console.error("claude CLI stdin closed early:", error));
-		this.child.stdin.end(`${stdinLine}\n`);
-
-		createInterface({ input: this.child.stdout }).on("line", (line) => this.handleLine(line));
-
+		this.contextProbe = new ContextWindowProbe(
+			(line) => this.child.stdin.write(`${line}\n`),
+			() => { if (!this.stopping) this.child.stdin.write(`${stdinLine}\n`); },
+			(tokens) => { this.contextWindow = tokens; this.turn.setContextWindow(tokens); },
+		);
+		createInterface({ input: this.child.stdout }).on("line", (line) => {
+			try { this.handleLine(line); }
+			catch { this.fail("claude CLI emitted malformed stream output"); }
+		});
 		this.setSignal(signal);
+		if (!this.stopping) this.contextProbe.start();
 	}
 
-	continueTurn(turn: ClaudeTurn, toolResults: ToolResultMessage[], signal: AbortSignal | undefined): void {
+	canContinue(owner: symbol, sessionId: string | undefined, configuration: unknown, messages: Message[], results: ToolResultMessage[]): boolean {
+		const conversation = conversationForReuse(messages);
+		return !this.stopping && owner === this.owner && !!sessionId && sessionId === this.sessionId
+			&& isDeepStrictEqual(configuration, this.configuration)
+			&& isDeepStrictEqual(conversation.slice(0, this.conversation.length), this.conversation)
+			&& conversation.length === this.conversation.length + this.admitted.length
+			&& results.length === this.admitted.length
+			&& new Set(results.map((result) => result.toolCallId)).size === results.length
+			&& this.admitted.every((call) => results.some((result) => result.toolCallId === call.id && result.toolName === call.name));
+	}
+
+	continueTurn(turn: ClaudeTurn, messages: Message[], results: ToolResultMessage[], signal: AbortSignal | undefined): void {
 		removeLiveProcess(this);
-
-		const unanswered = this.turn.getToolCalls().flatMap((toolCall) => {
-			const result = toolResults.find((toolResult) => toolResult.toolCallId === toolCall.id);
-			return result ? [{ toolCall, result }] : [];
-		});
-
+		const admitted = this.admitted;
+		this.admitted = [];
+		this.conversation = structuredClone(conversationForReuse(messages));
 		this.turn = turn;
+		this.turn.setContextWindow(this.contextWindow);
+		this.sourceComplete = this.sourceCalls.length > 0;
 		this.setSignal(signal);
-
-		this.answerToolCalls(turn, unanswered).catch((error: unknown) => {
-			console.error("claude CLI tool results failed:", error);
-			turn.fail(START_FAILED_MESSAGE, "error");
-			this.kill();
-		});
+		if (this.stopping) return;
+		for (const call of admitted) {
+			const result = results.find((candidate) => candidate.toolCallId === call.id)!;
+			this.bridge.resolveToolCall(call, result);
+		}
+		this.flushAdmissions();
 	}
 
 	kill(): void {
 		removeLiveProcess(this);
+		if (this.stopping || this.closed) return;
+		this.stopping = true;
+		this.contextProbe?.close();
 		this.child.kill();
+		this.killTimer = setTimeout(() => this.child.kill("SIGKILL"), 1000);
+		this.killTimer.unref();
+	}
+
+	fail(message: string): void {
+		// A parallel request can fail after the admitted slice was handed to
+		// Pi. Retain that failure for its continuation instead of silently
+		// replaying and hiding the compatibility error.
+		if (this.sessionId && this.turn.finished && this.toolCallIds.length > 0) this.pendingError = message;
+		this.turn.fail(message, "error");
+		this.kill();
+		if (this.pendingError) addLiveProcess(this);
+	}
+
+	consumeFailure(owner: symbol, turn: ClaudeTurn): boolean {
+		if (owner !== this.owner || !this.pendingError) return false;
+		const message = this.pendingError;
+		this.pendingError = undefined;
+		this.kill();
+		turn.fail(message, "error");
+		return true;
+	}
+
+	cancelCall(call: PendingToolCall): void {
+		this.cancelledIds.add(call.id);
+		// Already admitted work belongs to Pi and cannot be undone. A queued
+		// request, however, must never become executable after cancellation.
+		this.sourceCalls = this.sourceCalls.filter((intent) => intent.id !== call.id);
+	}
+
+	/** Only authenticated MCP requests, never stdout intent alone, admit side effects. */
+	flushAdmissions(): void {
+		if (this.stopping || this.turn.finished || !this.sourceComplete) return;
+		const pending = this.bridge.getPendingToolCalls();
+		if (pending.length === 0) return;
+		const calls: ToolCall[] = [];
+		for (const call of pending) {
+			const intent = this.sourceCalls.find((candidate) => candidate.id === call.id);
+			if (!intent || intent.name !== call.name || !isDeepStrictEqual(intent.arguments, call.arguments)) {
+				this.fail("claude CLI compatibility error: MCP call does not match its streamed tool intent");
+				return;
+			}
+			calls.push(intent);
+		}
+		this.sourceCalls = this.sourceCalls.filter((call) => !pending.some((admitted) => admitted.id === call.id));
+		this.admitted = pending;
+		this.toolCallIds = pending.map((call) => call.id);
+		this.turn.admit(calls);
+		this.conversation.push(...structuredClone(conversationForReuse([this.turn.getMessage()])));
+		if (this.sessionId) addLiveProcess(this);
+		else this.kill(); // No trusted scope: return the batch, then use fresh replay.
 	}
 
 	private readonly abort = () => {
@@ -438,109 +537,83 @@ class ClaudeProcess implements LiveProcess {
 		this.signal?.removeEventListener("abort", this.abort);
 		this.signal = signal;
 		signal?.addEventListener("abort", this.abort, { once: true });
-
 		if (signal?.aborted) this.abort();
 	}
 
 	private handleLine(line: string): void {
+		if (this.stopping || !line.trim()) return;
+		if (this.contextProbe?.handle(JSON.parse(line))) return;
 		const event = parseCliLine(line);
 		if (!event) return;
-
-		// Output after a finished message means the CLI moved on without waiting for our tool results.
-		if (this.turn.finished) {
-			this.kill();
-			return;
-		}
-
-		this.turn.handle(event);
-		if (!this.turn.finished) return;
-
-		const toolCalls = this.turn.getToolCalls();
-		this.toolCallIds = toolCalls.map((toolCall) => toolCall.id);
-
-		const reachesBridge = toolCalls.length > 0 && toolCalls.every((toolCall) => isValidToolCall(this.tools, toolCall));
-		if (!reachesBridge) {
-			this.kill();
-			return;
-		}
-
-		addLiveProcess(this);
-	}
-
-	private async answerToolCalls(turn: ClaudeTurn, unanswered: UnansweredToolCall[]): Promise<void> {
-		while (unanswered.length > 0 && !turn.started) {
-			const pending = this.bridge.getPendingToolCalls();
-			let answered = false;
-
-			for (const call of pending) {
-				const index = unanswered.findIndex(({ toolCall }) => isSameToolCall(toolCall, call));
-				const match = unanswered[index];
-				if (!match) continue;
-
-				this.bridge.resolveToolCall(call, match.result);
-				unanswered.splice(index, 1);
-				answered = true;
+		if (event.type === "toolResults") {
+			if (event.ids.some((id) => this.sourceCalls.some((call) => call.id === id))) {
+				this.fail("claude CLI refused a harness tool call before MCP admission");
 			}
-
-			if (answered) continue;
-
-			// Rejects only once the bridge has closed, which means the process is already gone.
-			const next = await this.bridge.waitForToolCalls(pending.length + 1).catch(() => null);
-			if (!next) return;
+			return;
+		}
+		// Moving on before held calls were answered means the CLI did not
+		// honor this tool wait. Never execute further stdout-only intentions.
+		if (this.turn.finished) {
+			this.fail("claude CLI moved on while harness tool calls were waiting for results");
+			return;
+		}
+		if (event.type === "messageStart" && this.sourceComplete && this.sourceCalls.length > 0) {
+			this.fail("claude CLI moved on without admitting its harness tool calls");
+			return;
+		}
+		if (event.type === "messageStart") this.contextProbe?.refresh();
+		this.turn.handle(event);
+		if (this.turn.finished) { this.kill(); return; }
+		if (event.type === "messageStop" && this.turn.waitingForAdmission) {
+			const intents = this.turn.getIntents();
+			if (intents.length === 0 || new Set(intents.map((call) => call.id)).size !== intents.length) {
+				this.fail("claude CLI emitted an invalid tool batch");
+				return;
+			}
+			this.sourceCalls = intents.filter((call) => !this.cancelledIds.has(call.id));
+			this.sourceComplete = true;
+			this.flushAdmissions();
 		}
 	}
 
 	private handleClose(message: string): void {
 		if (this.closed) return;
-
 		this.closed = true;
+		this.contextProbe?.close();
+		clearTimeout(this.killTimer);
 		removeLiveProcess(this);
+		if (this.pendingError) addLiveProcess(this);
 		this.signal?.removeEventListener("abort", this.abort);
-
 		if (this.stderr.trim()) console.error("claude CLI stderr:", this.stderr.trim());
-
 		this.turn.fail(message, "error");
-
 		removeTurnResources(this.bridge, this.files).catch((error: unknown) => {
 			console.error("claude CLI cleanup failed:", error);
 		});
 	}
 }
 
-function continueLiveProcess(turn: ClaudeTurn, messages: Message[], signal: AbortSignal | undefined): boolean {
+function continueLiveProcess(turn: ClaudeTurn, owner: symbol, sessionId: string | undefined, configuration: unknown, messages: Message[], signal: AbortSignal | undefined): boolean {
 	const assistantIndex = messages.findLastIndex((message) => message.role === "assistant");
 	const assistant = messages[assistantIndex];
 	if (assistant?.role !== "assistant") return false;
-
-	const toolCallIds = assistant.content.flatMap((block) => (block.type === "toolCall" ? [block.id] : []));
-	const process = getLiveProcess(toolCallIds);
+	const ids = assistant.content.flatMap((block) => block.type === "toolCall" ? [block.id] : []);
+	const process = getLiveProcess(ids, owner, sessionId);
 	if (!(process instanceof ClaudeProcess)) return false;
-
+	if (process.consumeFailure(owner, turn)) return true;
 	const trailing = messages.slice(assistantIndex + 1);
-	const toolResults = trailing.filter((message) => message.role === "toolResult");
-
-	const onlyToolResults = toolResults.length === trailing.length;
-	const answersEveryCall = toolCallIds.every((id) => toolResults.some((toolResult) => toolResult.toolCallId === id));
-
-	if (!onlyToolResults || !answersEveryCall) {
+	const results = trailing.filter((message) => message.role === "toolResult");
+	if (trailing.length !== results.length || !process.canContinue(owner, sessionId, configuration, messages, results)) {
 		process.kill();
 		return false;
 	}
-
-	process.continueTurn(turn, toolResults, signal);
+	process.continueTurn(turn, messages, results, signal);
 	return true;
 }
 
-// Either one takes precedence over the logged-in subscription, so a key saved on the Keys page
-// would bill turns to the API account.
-const API_CREDENTIAL_ENV_NAMES = ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"];
-
-function toClaudeEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-	const claudeEnv: NodeJS.ProcessEnv = { ...env, MCP_TOOL_TIMEOUT: String(MCP_TOOL_TIMEOUT_MS) };
-
-	for (const name of API_CREDENTIAL_ENV_NAMES) delete claudeEnv[name];
-
-	return claudeEnv;
+function toClaudeEnv(): NodeJS.ProcessEnv {
+	// Preserve native CLI auth/routing, including launch-environment credentials.
+	// Claude Code chooses the account and billing method, not LearnHarness.
+	return { ...externalCliEnv(), MCP_TOOL_TIMEOUT: String(MCP_TOOL_TIMEOUT_MS) };
 }
 
 async function startProcess(
@@ -549,10 +622,30 @@ async function startProcess(
 	model: Model<Api>,
 	context: TranscriptContext,
 	options: SimpleStreamOptions | undefined,
+	owner: symbol,
+	configuration: unknown,
+	env: NodeJS.ProcessEnv,
 ): Promise<void> {
+	if (options?.signal?.aborted) { turn.fail(ABORT_MESSAGE, "aborted"); return; }
 	const input = toClaudeInput(context.messages);
-	const bridge = await createToolBridge(input.tools);
-	const files = await createTurnFiles(input.systemPrompt, bridge.mcpConfig);
+	let cliProcess: ClaudeProcess | undefined;
+	const bridge = await createToolBridge(input.tools, {
+		onCall: () => cliProcess?.flushAdmissions(),
+		onError: (error) => cliProcess?.fail(error.message),
+		onCancel: (call) => cliProcess?.cancelCall(call),
+	});
+	let files: TurnFiles;
+	try {
+		files = await createTurnFiles(input.systemPrompt, bridge.mcpConfig);
+	} catch (error) {
+		await bridge.close();
+		throw error;
+	}
+	if (options?.signal?.aborted) {
+		turn.fail(ABORT_MESSAGE, "aborted");
+		await removeTurnResources(bridge, files);
+		return;
+	}
 
 	let child: ChildProcessWithoutNullStreams | null;
 	try {
@@ -563,7 +656,7 @@ async function startProcess(
 			mcpConfigFile: files.mcpConfigFile,
 			allowedTools: bridge.allowedTools,
 		});
-		child = runClaude(args, { cwd: files.cwd, env: toClaudeEnv(process.env) });
+		child = await runClaude(args, { cwd: files.cwd, env, signal: options?.signal });
 	} catch (error) {
 		await removeTurnResources(bridge, files);
 		throw error;
@@ -575,29 +668,28 @@ async function startProcess(
 		return;
 	}
 
-	new ClaudeProcess(child, bridge, files, input.tools, turn).start(toStreamJsonLine(input.userContent), options?.signal);
+	cliProcess = new ClaudeProcess(child, bridge, files, turn, owner, options?.sessionId, configuration, structuredClone(conversationForReuse(context.messages)));
+	cliProcess.start(toStreamJsonLine(input.userContent), options?.signal);
 }
 
 export function createClaudeCodeStreamFunction(runClaude: RunClaude): StreamFunction<Api, SimpleStreamOptions> {
+	const owner = Symbol("claude-code stream owner");
 	return (model, context, options) => {
 		const stream = createAssistantMessageEventStream();
 		const turn = new ClaudeTurn(stream, model);
 
-		if (continueLiveProcess(turn, context.messages, options?.signal)) return stream;
+		const env = toClaudeEnv();
+		// An existing child must not retain stale authentication/routing after env changes.
+		const configuration = { request: configurationForReuse(model, context, toEffort(options?.reasoning)), env };
+		if (continueLiveProcess(turn, owner, options?.sessionId, configuration, context.messages, options?.signal)) return stream;
 
-		startProcess(runClaude, turn, model, context, options).catch((error: unknown) => {
+		startProcess(runClaude, turn, model, context, options, owner, configuration, env).catch((error: unknown) => {
 			console.error("claude CLI turn failed:", error);
-			turn.fail(START_FAILED_MESSAGE, "error");
+			turn.fail(options?.signal?.aborted ? ABORT_MESSAGE : error instanceof ClaudeLaunchError ? error.message : START_FAILED_MESSAGE, options?.signal?.aborted ? "aborted" : "error");
 		});
 
 		return stream;
 	};
 }
 
-function spawnClaude(args: string[], options: RunClaudeOptions): ChildProcessWithoutNullStreams | null {
-	const binary = getClaudeBinary();
-
-	return binary ? spawn(binary, args, { ...options, stdio: "pipe" }) : null;
-}
-
-export const streamClaudeCode = createClaudeCodeStreamFunction(spawnClaude);
+export const streamClaudeCode = createClaudeCodeStreamFunction(createClaudeLauncher());

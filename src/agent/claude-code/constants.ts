@@ -1,4 +1,4 @@
-export const CLAUDE_CODE_PROVIDER = "claude-code";
+export { CLAUDE_CODE_PROVIDER } from "../../core/contracts/claude-code.ts";
 
 export const CLAUDE_CODE_API = "claude-code-cli";
 

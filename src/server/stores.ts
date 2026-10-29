@@ -13,6 +13,8 @@ import { jobStore } from "../store/jobs.ts";
 import { oauthCredentialStore } from "../store/oauth-credentials.ts";
 import { settingsStore } from "../store/settings.ts";
 import { resolveSettings, type EffectiveSettings } from "../core/settings-resolution.ts";
+import { syncCustomProvider } from "./custom-provider.ts";
+
 // Subscription sign-in tokens: pi-ai reads/refreshes them through this file store.
 bindCredentialStore(oauthCredentialStore);
 
@@ -37,3 +39,7 @@ export type Stores = typeof stores;
 export function effectiveSettings(): EffectiveSettings {
 	return resolveSettings(settingsStore.readSettings());
 }
+
+// Boot: register the custom endpoint (when configured) into piModels(); the
+// POST /api/custom-provider route re-syncs after every connect.
+syncCustomProvider();

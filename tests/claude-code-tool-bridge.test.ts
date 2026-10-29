@@ -107,13 +107,13 @@ test("tools/call stays pending until resolved and returns its text and image con
 	t.after(() => client.close());
 
 	let settled = false;
-	const pending = client.callTool({ name: "read", arguments: { path: "notes.md" } }).finally(() => {
+	const pending = client.callTool({ name: "read", arguments: { path: "notes.md" }, _meta: { "claudecode/toolUseId": "call-1" } }).finally(() => {
 		settled = true;
 	});
 
 	const [call] = await bridge.waitForToolCalls(1);
 	assert.ok(call);
-	assert.deepEqual(call, { name: "read", arguments: { path: "notes.md" } });
+	assert.deepEqual(call, { id: "call-1", name: "read", arguments: { path: "notes.md" } });
 	assert.deepEqual(bridge.getPendingToolCalls(), [call]);
 
 	await new Promise((resolve) => setTimeout(resolve, 20));
@@ -136,6 +136,33 @@ test("tools/call stays pending until resolved and returns its text and image con
 	assert.deepEqual(bridge.getPendingToolCalls(), []);
 });
 
+test("individual MCP cancellation removes only that request and leaves the other request resolvable", async (t) => {
+	let acknowledgeCancel!: () => void;
+	const cancelled = new Promise<void>((resolve) => { acknowledgeCancel = resolve; });
+	const cancellations: string[] = [];
+	const bridge = await createToolBridge([READ_TOOL], {
+		onCall() {}, onError(error) { throw error; },
+		onCancel(call) { cancellations.push(call.id); acknowledgeCancel(); },
+	});
+	t.after(() => bridge.close());
+	const client = await connectClient(bridge);
+	t.after(() => client.close());
+	const first = client.callTool({ name: "read", arguments: { path: "a" }, _meta: { "claudecode/toolUseId": "call-a" } });
+	const controller = new AbortController();
+	const second = client.callTool({ name: "read", arguments: { path: "b" }, _meta: { "claudecode/toolUseId": "call-b" } }, undefined, { signal: controller.signal });
+	const rejected = assert.rejects(second, /cancelled B/);
+	await bridge.waitForToolCalls(2);
+	controller.abort("cancelled B");
+	await cancelled;
+	await rejected;
+	assert.deepEqual(cancellations, ["call-b"]);
+	const pending = bridge.getPendingToolCalls();
+	assert.deepEqual(pending.map((call) => call.id), ["call-a"]);
+	bridge.resolveToolCall(pending[0]!, toolResult([{ type: "text", text: "A" }]));
+	assert.deepEqual((await first).content, [{ type: "text", text: "A" }]);
+	assert.deepEqual(bridge.getPendingToolCalls(), []);
+});
+
 test("waitForToolCalls resolves once that many calls are pending, in arrival order", async (t) => {
 	const bridge = await createToolBridge([READ_TOOL, SCREENSHOT_TOOL]);
 	t.after(() => bridge.close());
@@ -147,15 +174,15 @@ test("waitForToolCalls resolves once that many calls are pending, in arrival ord
 		waited = true;
 	});
 
-	void client.callTool({ name: "read", arguments: { path: "a.md" } }).catch(() => {});
+	void client.callTool({ name: "read", arguments: { path: "a.md" }, _meta: { "claudecode/toolUseId": "call-1" } }).catch(() => {});
 	await new Promise((resolve) => setTimeout(resolve, 20));
 	assert.equal(waited, false);
 
-	void client.callTool({ name: "screenshot", arguments: {} }).catch(() => {});
+	void client.callTool({ name: "screenshot", arguments: {}, _meta: { "claudecode/toolUseId": "call-2" } }).catch(() => {});
 
 	assert.deepEqual(await waiting, [
-		{ name: "read", arguments: { path: "a.md" } },
-		{ name: "screenshot", arguments: {} },
+		{ id: "call-1", name: "read", arguments: { path: "a.md" } },
+		{ id: "call-2", name: "screenshot", arguments: {} },
 	]);
 });
 
@@ -165,7 +192,7 @@ test("isError result becomes MCP isError true", async (t) => {
 	const client = await connectClient(bridge);
 	t.after(() => client.close());
 
-	const pending = client.callTool({ name: "read", arguments: { path: "missing.md" } });
+	const pending = client.callTool({ name: "read", arguments: { path: "missing.md" }, _meta: { "claudecode/toolUseId": "call-1" } });
 	const [call] = await bridge.waitForToolCalls(1);
 	assert.ok(call);
 
@@ -180,7 +207,7 @@ test("close fails pending calls and frees the port", async () => {
 	const bridge = await createToolBridge([READ_TOOL]);
 	const port = Number(new URL(getServerConfig(bridge).url).port);
 	const client = await connectClient(bridge);
-	const pending = client.callTool({ name: "read", arguments: { path: "notes.md" } });
+	const pending = client.callTool({ name: "read", arguments: { path: "notes.md" }, _meta: { "claudecode/toolUseId": "call-1" } });
 	await bridge.waitForToolCalls(1);
 
 	await bridge.close();
@@ -217,6 +244,25 @@ test('mcpConfig is {"mcpServers":{"learnharness":{"type":"http","url":...,"heade
 	assert.equal(server.type, "http");
 	assert.match(server.url, /^http:\/\/127\.0\.0\.1:\d+\/mcp$/);
 	assert.match(server.headers.Authorization, /^Bearer [0-9a-f]{64}$/);
+});
+
+test("missing and reused Claude tool IDs are rejected rather than matched by arguments", async (t) => {
+	const failures: string[] = [];
+	const bridge = await createToolBridge([READ_TOOL], { onCall: () => {}, onError: (error) => failures.push(error.message) });
+	t.after(() => bridge.close());
+	const client = await connectClient(bridge);
+	t.after(() => client.close());
+	await assert.rejects(client.callTool({ name: "read", arguments: { path: "a" } }), /claudecode\/toolUseId/);
+	assert.deepEqual(bridge.getPendingToolCalls(), []);
+	const params = { name: "read", arguments: { path: "a" }, _meta: { "claudecode/toolUseId": "same-id" } };
+	const first = client.callTool(params);
+	const [call] = await bridge.waitForToolCalls(1);
+	assert.ok(call);
+	bridge.resolveToolCall(call, toolResult([{ type: "text", text: "first" }]));
+	await first;
+	await assert.rejects(client.callTool(params), /claudecode\/toolUseId/);
+	assert.deepEqual(bridge.getPendingToolCalls(), []);
+	assert.equal(failures.length, 2);
 });
 
 test("toolNameFromMcp strips the bridge prefix", () => {

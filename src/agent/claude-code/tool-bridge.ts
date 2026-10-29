@@ -7,7 +7,9 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {
 	CallToolRequestSchema,
+	ErrorCode,
 	ListToolsRequestSchema,
+	McpError,
 	type CallToolResult,
 	type Tool as McpTool,
 } from "@modelcontextprotocol/sdk/types.js";
@@ -18,7 +20,11 @@ const MCP_TOOL_PREFIX = `mcp__${BRIDGE_SERVER_NAME}__`;
 const LOOPBACK_HOST = "127.0.0.1";
 const TOKEN_BYTES = 32;
 
-export type PendingToolCall = { name: string; arguments: JsonObject };
+export type PendingToolCall = { id: string; name: string; arguments: JsonObject };
+
+type BridgeCallbacks = { onCall(): void; onError(error: Error): void; onCancel?(call: PendingToolCall): void };
+
+export const MCP_IDENTITY_ERROR = "claude CLI compatibility error: MCP calls must include a unique claudecode/toolUseId";
 
 export type ToolBridge = {
 	mcpConfig: string;
@@ -61,8 +67,22 @@ class ToolCallQueue {
 	private readonly results = new Map<PendingToolCall, (result: CallToolResult) => void>();
 	private waiters: ToolCallWaiter[] = [];
 
-	add(call: PendingToolCall): Promise<CallToolResult> {
-		const result = new Promise<CallToolResult>((resolve) => this.results.set(call, resolve));
+	add(call: PendingToolCall, signal: AbortSignal, onCancel?: (call: PendingToolCall) => void): Promise<CallToolResult> {
+		const result = new Promise<CallToolResult>((resolve) => {
+			const cancel = () => {
+				const settle = this.results.get(call);
+				if (!settle) return;
+				settle({ content: [{ type: "text", text: "MCP request cancelled" }], isError: true });
+				onCancel?.(call);
+			};
+			this.results.set(call, (result) => {
+				this.results.delete(call);
+				signal.removeEventListener("abort", cancel);
+				resolve(result);
+			});
+			signal.addEventListener("abort", cancel, { once: true });
+			if (signal.aborted) cancel();
+		});
 
 		this.wakeWaiters();
 
@@ -78,7 +98,6 @@ class ToolCallQueue {
 
 	resolve(call: PendingToolCall, result: ToolResultMessage): void {
 		this.results.get(call)?.(toCallToolResult(result));
-		this.results.delete(call);
 	}
 
 	list(): PendingToolCall[] {
@@ -86,7 +105,9 @@ class ToolCallQueue {
 	}
 
 	clear(): void {
-		this.results.clear();
+		for (const settle of this.results.values()) {
+			settle({ content: [{ type: "text", text: "MCP bridge closed" }], isError: true });
+		}
 
 		for (const waiter of this.waiters) waiter.reject(new Error("claude-code tool bridge closed"));
 		this.waiters = [];
@@ -104,14 +125,28 @@ class ToolCallQueue {
 
 // Low-level Server on purpose: McpServer.registerTool only takes zod schemas, and pi tools carry
 // JSON Schema that must reach the CLI unchanged.
-function createMcpServer(tools: Tool[], queue: ToolCallQueue): Server {
+function createMcpServer(tools: Tool[], queue: ToolCallQueue, callbacks?: BridgeCallbacks): Server {
 	const server = new Server({ name: BRIDGE_SERVER_NAME, version: "1.0.0" }, { capabilities: { tools: {} } });
 
 	server.setRequestHandler(ListToolsRequestSchema, () => ({ tools: tools.map(toMcpTool) }));
 
-	server.setRequestHandler(CallToolRequestSchema, (request) => {
-		const call = { name: request.params.name, arguments: (request.params.arguments ?? {}) as JsonObject };
-		return queue.add(call);
+	const seenIds = new Set<string>();
+	server.setRequestHandler(CallToolRequestSchema, (request, extra) => {
+		const id = request.params._meta?.["claudecode/toolUseId"];
+		if (typeof id !== "string" || !id.trim() || seenIds.has(id)) {
+			const error = new McpError(ErrorCode.InvalidParams, MCP_IDENTITY_ERROR);
+			callbacks?.onError(error);
+			throw error;
+		}
+		if (!tools.some((tool) => tool.name === request.params.name)) {
+			const error = new McpError(ErrorCode.InvalidParams, "claude CLI requested an undeclared harness tool");
+			callbacks?.onError(error);
+			throw error;
+		}
+		seenIds.add(id);
+		const result = queue.add({ id, name: request.params.name, arguments: (request.params.arguments ?? {}) as JsonObject }, extra.signal, callbacks?.onCancel);
+		callbacks?.onCall();
+		return result;
 	});
 
 	return server;
@@ -167,16 +202,22 @@ function toMcpConfig(port: number, authorization: string): string {
 	return JSON.stringify({ mcpServers: { [BRIDGE_SERVER_NAME]: server } });
 }
 
-export async function createToolBridge(tools: Tool[]): Promise<ToolBridge> {
+export async function createToolBridge(tools: Tool[], callbacks?: BridgeCallbacks): Promise<ToolBridge> {
 	const authorization = `Bearer ${randomBytes(TOKEN_BYTES).toString("hex")}`;
 
 	const queue = new ToolCallQueue();
-	const mcpServer = createMcpServer(tools, queue);
+	const mcpServer = createMcpServer(tools, queue, callbacks);
 	const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: () => randomUUID() });
 	await mcpServer.connect(transport);
 
 	const httpServer = createHttpServer(transport, authorization);
-	const { port } = await listen(httpServer);
+	let port: number;
+	try {
+		({ port } = await listen(httpServer));
+	} catch (error) {
+		await mcpServer.close();
+		throw error;
+	}
 
 	return {
 		mcpConfig: toMcpConfig(port, authorization),

@@ -6,6 +6,7 @@ type BinaryLookup = {
 	env: Record<string, string | undefined>;
 	platform: NodeJS.Platform;
 	homeDir: string;
+	cwd?: string;
 	isExecutable: (path: string) => boolean;
 };
 
@@ -21,7 +22,9 @@ function getWindowsSearchSpec(env: BinaryLookup["env"], homeDir: string): Search
 
 	return {
 		paths,
-		names: ["claude.exe", "claude.cmd"],
+		// Direct spawn deliberately uses no shell. A .cmd-only npm install
+		// is not runnable and must not count as an available provider.
+		names: ["claude.exe"],
 		knownDirs: [
 			paths.join(homeDir, ".local", "bin"),
 			paths.join(homeDir, ".claude", "local"),
@@ -49,7 +52,7 @@ function getPosixSearchSpec(env: BinaryLookup["env"], homeDir: string): SearchSp
 	};
 }
 
-export function resolveClaudeBinary({ env, platform, homeDir, isExecutable }: BinaryLookup): string | null {
+export function resolveClaudeBinary({ env, platform, homeDir, cwd = process.cwd(), isExecutable }: BinaryLookup): string | null {
 	const { paths, names, knownDirs } = platform === "win32"
 		? getWindowsSearchSpec(env, homeDir)
 		: getPosixSearchSpec(env, homeDir);
@@ -58,7 +61,9 @@ export function resolveClaudeBinary({ env, platform, homeDir, isExecutable }: Bi
 
 	for (const name of names) {
 		for (const dir of [...pathDirs, ...knownDirs]) {
-			const candidate = paths.join(dir, name);
+			// Discovery is relative to the server cwd; probes/model work use
+			// different directories and must receive the same absolute identity.
+			const candidate = paths.resolve(cwd, dir, name);
 			if (isExecutable(candidate)) return candidate;
 		}
 	}
