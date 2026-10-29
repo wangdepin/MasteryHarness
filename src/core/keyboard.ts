@@ -17,6 +17,8 @@
  *   "mod+d"    — mod = ⌘ on macOS, Ctrl elsewhere (both are accepted live)
  *   "shift+tab", "alt+arrowdown", "mod+shift+f", "?", "f2", "escape"
  * Order is fixed: mod, alt, shift, then the key.
+ * A bare letter typed with Shift keeps its case ("G" is not "g"); a binding of
+ * space-separated steps ("g g") is a key sequence (see advanceSequence).
  */
 
 export type KeyAction =
@@ -36,7 +38,10 @@ export type KeyAction =
 	| "question-pick-row"
 	| "question-submit"
 	| "open-settings"
-	| "toggle-user-thinking";
+	| "toggle-user-thinking"
+	| "read-by-sentence"
+	| "scroll-top"
+	| "scroll-bottom";
 
 /** Where the cheat sheet groups an action (display only — dispatch is
  *  global; a seam that isn't mounted simply no-ops). */
@@ -52,6 +57,9 @@ export interface KeyActionDef {
 	 *  question dock's row machine); never dispatched from the registry,
 	 *  so they can't leak to pages where the surface isn't mounted. */
 	displayOnly?: boolean;
+	/** Dispatched, but not rebindable in settings (a key sequence: the
+	 *  rebind capture records one combo at a time). */
+	fixed?: boolean;
 }
 
 export const KEYBOARD_ACTIONS: readonly KeyActionDef[] = [
@@ -72,6 +80,11 @@ export const KEYBOARD_ACTIONS: readonly KeyActionDef[] = [
 	// Mod+F is surface-scoped: graph node search and session text Find share
 	// one action/binding. Only the currently mounted surface listens.
 	{ id: "find", label: "Find", scope: "global", binding: "mod+f" },
+	{ id: "read-by-sentence", label: "Read latest passage by sentence", scope: "chat", binding: "mod+r" },
+	// Vim-style session edges. Bare keys: they fire only outside typing
+	// surfaces (the dispatcher's input guard), so Esc out of the composer first.
+	{ id: "scroll-top", label: "Jump to session start", scope: "chat", binding: "g g", fixed: true },
+	{ id: "scroll-bottom", label: "Jump to session end", scope: "chat", binding: "G", fixed: true },
 	{ id: "cheat-sheet", label: "Shortcut cheat sheet", scope: "global", binding: "?" },
 	// The question dock's row machine (wave B) — displayOnly: the dock owns
 	// the keys while a question is expanded; the registry never dispatches
@@ -154,12 +167,57 @@ export function eventBinding(e: KeyboardEvent): string {
 	// "shift+/"), so it returns alone. With a real modifier riding along,
 	// shift is explicit (⌘⇧F = "mod+shift+f"); non-printable keys (Tab,
 	// arrows) always keep their shift (Shift+Tab = "shift+tab").
-	if (e.key.length === 1 && !mod && !e.altKey) return e.key.toLowerCase();
+	// A shifted letter stays distinct from the plain one ("G" vs "g") — vim-style
+	// bindings need it. CapsLock does not count: only the Shift key itself.
+	if (e.key.length === 1 && !mod && !e.altKey) {
+		return e.shiftKey && /^[a-z]$/i.test(e.key) ? e.key.toUpperCase() : e.key.toLowerCase();
+	}
 	const mods: string[] = [];
 	if (mod) mods.push("mod");
 	if (e.altKey) mods.push("alt");
 	if (e.shiftKey) mods.push("shift");
 	return [...mods, e.key.toLowerCase()].join("+");
+}
+
+/** Longest pause between the steps of a key sequence ("g" … "g"). */
+export const SEQUENCE_TIMEOUT_MS = 1000;
+
+/** The steps typed so far toward a sequence, and when the last one landed. */
+export interface SequenceState {
+	keys: string[];
+	at: number;
+}
+
+export interface SequenceStep {
+	/** The sequence action this key completed, if any. */
+	action: KeyAction | null;
+	/** Where the sequence stands now; null = nothing pending. */
+	state: SequenceState | null;
+}
+
+/**
+ * Feed one bare-key binding to the sequence matcher (pure). A key that
+ * completes a registered sequence ("g g") returns its action; one that is
+ * only a prefix keeps waiting (state); anything else resets — and a broken
+ * sequence restarts from the key that broke it, so "g x g g" still fires.
+ * Single-key bindings are not handled here: the caller dispatches those the
+ * ordinary way when this returns neither an action nor a pending state.
+ */
+export function advanceSequence(
+	state: SequenceState | null,
+	binding: string,
+	now: number,
+	keymap: ReadonlyMap<string, KeyAction> = effectiveKeymap(),
+): SequenceStep {
+	const keys = state && now - state.at <= SEQUENCE_TIMEOUT_MS ? [...state.keys, binding] : [binding];
+	const typed = keys.join(" ");
+	const completed = keymap.get(typed);
+	if (completed && keys.length > 1) return { action: completed, state: null };
+	for (const candidate of keymap.keys()) {
+		if (candidate.startsWith(`${typed} `)) return { action: null, state: { keys, at: now } };
+	}
+	if (keys.length > 1) return advanceSequence(null, binding, now, keymap);
+	return { action: null, state: null };
 }
 
 /** The window event name a registry action dispatches/answers on —
@@ -204,8 +262,10 @@ const KEY_GLYPH: Record<string, string> = {
 	space: "Space",
 };
 
-/** Format a binding for display: "mod+shift+f" → "⌘⇧F". */
+/** Format a binding for display: "mod+shift+f" → "⌘⇧F", "g g" → "gg". A
+ *  bare letter shows as typed ("G" is not "g"). */
 export function formatBinding(binding: string): string {
+	if (binding.includes(" ")) return binding.split(" ").map(formatBinding).join("");
 	const parts = binding.split("+");
 	const key = parts.pop()!; // last part is always the key
 	const glyphs: string[] = [];
@@ -214,6 +274,7 @@ export function formatBinding(binding: string): string {
 		else if (part === "alt") glyphs.push(ALT_GLYPH);
 		else if (part === "shift") glyphs.push(SHIFT_GLYPH);
 	}
-	const keyGlyph = KEY_GLYPH[key] ?? key.toUpperCase();
+	const bareLetter = glyphs.length === 0 && /^[a-z]$/i.test(key);
+	const keyGlyph = KEY_GLYPH[key] ?? (bareLetter ? key : key.toUpperCase());
 	return glyphs.join("") + keyGlyph;
 }

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { DEFAULT_READER_PREFS, parseReaderPrefs, speechText, splitReaderUnits } from "../src/core/sentence-reader.ts";
+import { DEFAULT_READER_PREFS, latestReadablePassage, parseReaderPrefs, speechText, splitReaderUnits } from "../src/core/sentence-reader.ts";
+import type { LhViewMessage, LhViewPart } from "../src/core/view.ts";
 
 describe("splitReaderUnits", () => {
 	it("splits a paragraph into inline sentence steps", () => {
@@ -58,5 +59,43 @@ describe("parseReaderPrefs", () => {
 		assert.equal(p.rate, 0.7);
 		assert.equal(p.voice, DEFAULT_READER_PREFS.voice);
 		assert.equal(p.autoRead, false);
+	});
+});
+
+describe("latestReadablePassage — what the reader shortcut opens", () => {
+	const text = (t: string): LhViewPart => ({ type: "text", text: t });
+	const tool: LhViewPart = { type: "tool-probe" };
+	const teacher = (id: string, ...parts: LhViewPart[]): LhViewMessage => ({ id, role: "assistant", parts });
+	const learner = (id: string, t: string): LhViewMessage => ({ id, role: "user", parts: [text(t)] });
+
+	it("takes the last text part of the newest teacher message", () => {
+		const messages = [teacher("a", text("old")), learner("u", "hi"), teacher("b", text("first"), tool, text("second"), tool)];
+		assert.equal(latestReadablePassage(messages, false), "second");
+	});
+
+	it("looks past a newest message that only holds tool calls", () => {
+		const messages = [teacher("a", text("the lesson")), learner("u", "ok"), teacher("b", tool)];
+		assert.equal(latestReadablePassage(messages, false), "the lesson");
+	});
+
+	it("skips blank text and never reads the learner's own words", () => {
+		const messages = [teacher("a", text("real")), teacher("b", text("  \n"), tool), learner("u", "mine")];
+		assert.equal(latestReadablePassage(messages, false), "real");
+	});
+
+	it("returns null for no teacher text at all", () => {
+		assert.equal(latestReadablePassage([], false), null);
+		assert.equal(latestReadablePassage([learner("u", "hello"), teacher("a", tool)], false), null);
+	});
+
+	it("while streaming, the passage being written is not readable — and no older one stands in", () => {
+		const messages = [teacher("a", text("old")), teacher("b", tool, text("being writ"))];
+		assert.equal(latestReadablePassage(messages, true), null);
+		assert.equal(latestReadablePassage(messages, false), "being writ");
+	});
+
+	it("while streaming, a finished passage before the live tail is still readable", () => {
+		const messages = [teacher("a", text("done"), tool, text("")), learner("u", "x")];
+		assert.equal(latestReadablePassage(messages, true), "done");
 	});
 });

@@ -6,6 +6,23 @@ import { messageAnchorId, messageIdFromHash } from "@/src/core";
 
 export type SessionScrollContext = Pick<StickToBottomContext, "scrollRef" | "stopScroll">;
 
+export type SessionEdgeScrollContext = Pick<StickToBottomContext, "scrollRef" | "stopScroll" | "scrollToBottom">;
+
+/** gg: the start of the session. stopScroll releases the sticky-bottom follow
+ * BEFORE jumping — otherwise the next streamed token drags the view back down. */
+export function scrollSessionToTop(context: SessionEdgeScrollContext | null): void {
+	const main = context?.scrollRef.current;
+	if (!context || !main) return;
+	context.stopScroll();
+	main.scrollTo({ top: 0, behavior: "instant" });
+}
+
+/** G: the end of the session. scrollToBottom re-engages the follow lock, so
+ * the transcript tracks new output again. */
+export function scrollSessionToBottom(context: SessionEdgeScrollContext | null): void {
+	void context?.scrollToBottom("instant");
+}
+
 /** Scroll only the session's own containers (including tall question/code
  * areas), never sidebar/chrome. Inner containers move first, then the main
  * transcript. stopScroll releases the sticky-bottom animation BEFORE jumping. */

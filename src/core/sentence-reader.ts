@@ -4,6 +4,7 @@
  * speak for a step, and parses the learner's reader preferences. No DOM.
  */
 import { DEFAULT_TTS_VOICE, TTS_RATE_MAX, TTS_RATE_MIN, TTS_VOICES } from "./tts.ts";
+import type { LhViewMessage } from "./view.ts";
 
 export interface ReaderUnit {
 	/** Markdown of this step, rendered on its own. */
@@ -182,4 +183,24 @@ export function parseReaderPrefs(raw: string | null): ReaderPrefs {
 		voice: typeof o.voice === "string" && TTS_VOICES.some(([id]) => id === o.voice) ? o.voice : d.voice,
 		rate: num(o.rate, TTS_RATE_MIN, TTS_RATE_MAX, d.rate),
 	};
+}
+
+/**
+ * The passage the reader shortcut opens: the newest teacher text that is
+ * non-empty and finished — the same rule that shows the "Read by sentence"
+ * button. While a turn streams, the passage still being written is not
+ * readable, and an older one is not offered in its place.
+ */
+export function latestReadablePassage(messages: readonly LhViewMessage[], streaming: boolean): string | null {
+	for (let mi = messages.length - 1; mi >= 0; mi--) {
+		const message = messages[mi]!;
+		if (message.role !== "assistant") continue;
+		for (let pi = message.parts.length - 1; pi >= 0; pi--) {
+			const part = message.parts[pi]!;
+			if (part.type !== "text" || (part.text ?? "").trim() === "") continue;
+			const stillWriting = streaming && mi === messages.length - 1 && pi === message.parts.length - 1;
+			return stillWriting ? null : (part.text ?? "");
+		}
+	}
+	return null;
 }

@@ -332,4 +332,14 @@ describe("KeyboardSection (thin SSR)", () => {
 		assert.ok(!KEYBOARD_ACTIONS.some((a) => a.id as string === "model-menu-walk"));
 		assert.ok(!KEYBOARD_ACTIONS.some((a) => a.id as string === "model-menu-pick"));
 	});
+
+	it("key sequences (gg / G) list as fixed; Mod+R stays rebindable", () => {
+		const html = renderToStaticMarkup(<KeyboardSection />);
+		assert.ok(html.includes("Fixed — vim-style key"));
+		for (const id of ["scroll-top", "scroll-bottom"]) {
+			assert.ok(html.includes(`data-testid="kbd-row-${id}"`), id);
+			assert.ok(!html.includes(`data-testid="kbd-rebind-${id}"`), `${id} is not rebindable`);
+		}
+		assert.ok(html.includes(`data-testid="kbd-rebind-read-by-sentence"`));
+	});
 });

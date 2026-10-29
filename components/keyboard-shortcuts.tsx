@@ -11,6 +11,9 @@
  *   on their own Esc — usePopoverDismiss + ModelControl), then dictation
  *   CANCEL (discard the transcript, owner 2026-09-17 round 3), then abort of
  *   an in-flight turn.
+ * - Esc with nothing left to dismiss blurs the focused field, so bare-key
+ *   bindings (the vim-style "g g" / "G" session edges) become reachable
+ *   from the keyboard alone.
  * - Global actions dispatch lh:kbd-<action> window events; surfaces that are
  *   mounted listen (the lh:chat-renamed pattern). A surface that isn't
  *   mounted simply doesn't listen — an F2 on the graph view is a no-op, not
@@ -28,12 +31,14 @@ import { useBackdropDismiss } from "@/components/backdrop-dismiss";
 import { useRouter } from "next/navigation";
 import {
 	actionForBinding,
+	advanceSequence,
 	bindingForAction,
 	eventBinding,
 	formatBinding,
 	isTypingSurface,
 	kbdEventForAction,
 	KEYBOARD_ACTIONS,
+	type SequenceState,
 } from "@/src/core";
 import { isDictationActive } from "@/components/dictation";
 import { useSettingsDialog } from "@/components/settings/settings-dialog.tsx";
@@ -56,6 +61,9 @@ export function KeyboardShortcuts() {
 		openSettings: () => void;
 	}>({ router, setCheatOpen, openSettings });
 	handlersRef.current = { router, setCheatOpen, openSettings };
+	// Where a key sequence ("g" … "g") stands; ref, not state — it must never
+	// re-render, and the listener (attached per cheatOpen) reads it live.
+	const sequenceRef = useRef<SequenceState | null>(null);
 
 	useEffect(() => {
 		const onKeyDown = (e: KeyboardEvent) => {
@@ -64,6 +72,7 @@ export function KeyboardShortcuts() {
 			// the default action runs after dispatch, so suppressing it here
 			// works from any focus.
 			if (e.key === "Tab") {
+				sequenceRef.current = null;
 				e.preventDefault();
 				if (e.shiftKey) window.dispatchEvent(new CustomEvent("lh:kbd-cycle-thinking"));
 				// Plain Tab cycles the active surface's text fields (owner,
@@ -77,6 +86,7 @@ export function KeyboardShortcuts() {
 			}
 
 			if (e.key === "Escape") {
+				sequenceRef.current = null;
 				// Our own overlay is the topmost layer.
 				if (cheatOpen) {
 					setCheatOpen(false);
@@ -100,8 +110,28 @@ export function KeyboardShortcuts() {
 					window.dispatchEvent(new CustomEvent("lh:kbd-cancel-dictation"));
 					return;
 				}
-				window.dispatchEvent(new CustomEvent("lh:kbd-abort-turn"));
+				// A surface that has something to abort or dismiss cancels this
+				// event (the Chat's abort seam). Nobody claimed it: the focused
+				// field gives up focus — unless an IME composition owns the Esc.
+				const claimed = !window.dispatchEvent(new CustomEvent("lh:kbd-abort-turn", { cancelable: true }));
+				if (!claimed && !e.isComposing && isTypingSurface(e)) (e.target as HTMLElement).blur();
 				return;
+			}
+
+			// Bare keys outside typing surfaces may start or finish a sequence
+			// ("g g"). Modifier keydowns arrive on their own and must not
+			// disturb it; anything else that is not a bare key ends it.
+			if (e.key === "Shift" || e.key === "Control" || e.key === "Alt" || e.key === "Meta") return;
+			if (!e.metaKey && !e.ctrlKey && !e.altKey && !isTypingSurface(e)) {
+				const step = advanceSequence(sequenceRef.current, eventBinding(e), Date.now());
+				sequenceRef.current = step.state;
+				if (step.action) {
+					window.dispatchEvent(new CustomEvent(kbdEventForAction(step.action)));
+					return;
+				}
+				if (step.state) return;
+			} else {
+				sequenceRef.current = null;
 			}
 
 			// ── Registry dispatch.
@@ -133,6 +163,12 @@ export function KeyboardShortcuts() {
 				case "find":
 					// The mounted surface owns Find (session text / graph nodes).
 					// Claim Mod+F so Chromium's whole-window finder cannot open too.
+					e.preventDefault();
+					window.dispatchEvent(new CustomEvent(kbdEventForAction(action)));
+					break;
+				case "read-by-sentence":
+					// Claim Mod+R so the browser build does not reload the page
+					// (the desktop shell moved Reload to Mod+Shift+R).
 					e.preventDefault();
 					window.dispatchEvent(new CustomEvent(kbdEventForAction(action)));
 					break;

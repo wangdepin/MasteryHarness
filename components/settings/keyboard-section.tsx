@@ -9,7 +9,8 @@
  * (capture phase, preventDefault — nothing types anywhere), eventBinding
  * normalizes it, saveOverrides persists. Escape cancels. displayOnly
  * actions (a surface owns those keys — the question dock's row machine)
- * are listed for reading but never rebindable.
+ * and fixed actions (key sequences like "g g") are listed for reading but
+ * never rebindable.
  *
  * Thin: no conflict detection — if a new binding collides with another
  * action's, the first match in registry order wins; the cheat sheet shows
@@ -109,14 +110,14 @@ export function KeyboardSection() {
 									<SettingsRow
 										key={def.id}
 										label={def.label}
-										hint={def.displayOnly ? "Fixed — part of this screen" : undefined}
+										hint={def.displayOnly ? "Fixed — part of this screen" : def.fixed ? "Fixed — vim-style key" : undefined}
 										testid={`kbd-row-${def.id}`}
 									>
 										<span className="flex items-center gap-2">
 											<kbd className="rounded-sm border border-border bg-muted px-1.5 py-0.5 font-ui text-xs">
 												{rebinding === def.id ? "Press keys…" : formatBinding(effective)}
 											</kbd>
-											{def.displayOnly ? null : rebinding === def.id ? (
+											{def.displayOnly || def.fixed ? null : rebinding === def.id ? (
 												<button
 													type="button"
 													onClick={() => setRebinding(null)}
