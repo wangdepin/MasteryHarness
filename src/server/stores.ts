@@ -9,6 +9,7 @@
 import { bindCredentialStore } from "../agent/models.ts";
 import { chatStore } from "../store/chats.ts";
 import { graphStore } from "../store/graph.ts";
+import { sourceOrganizationStore } from "../store/source-organization.ts";
 import { jobStore } from "../store/jobs.ts";
 import { oauthCredentialStore } from "../store/oauth-credentials.ts";
 import { settingsStore } from "../store/settings.ts";
@@ -22,6 +23,7 @@ bindCredentialStore(oauthCredentialStore);
 export const stores = {
 	chatStore,
 	graphStore,
+	sourceOrganizationStore,
 	jobStore,
 	settingsStore,
 };
