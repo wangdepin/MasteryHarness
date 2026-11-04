@@ -92,7 +92,7 @@ import {
 } from "@/src/core";
 import { ReadingThinkingField } from "@/components/reading-thinking";
 import { QuoteSelection } from "@/components/quote-selection";
-import { appendQuote, QUOTE_EVENT } from "@/components/quote-selection-dom";
+import { QUOTE_EVENT, seedWithQuote } from "@/components/quote-selection-dom";
 import { SentenceReader, SentenceReaderButton } from "@/components/sentence-reader";
 import { currentUserThinkingOpen, setAllUserThinkingOpen } from "@/components/thinking-block";
 
@@ -554,6 +554,17 @@ export function Chat({
 	}, []);
 	const applyReadingThinking = useCallback((v: string) => {
 		readingThinkingRef.current = v;
+	}, []);
+	/** A quote selected from the teaching prose, appended to the reading field.
+	 *  Built on the live text (the ref), never the seed value, which only
+	 *  changes on a reset; the revision bump is what makes the field, which
+	 *  owns its own draft, show it. */
+	const appendReadingQuote = useCallback((quote: string) => {
+		setReadingThinkingSeed((previous) => {
+			const next = seedWithQuote(previous, readingThinkingRef.current, quote);
+			readingThinkingRef.current = next.value;
+			return next;
+		});
 	}, []);
 	const clearReadingThinking = useCallback(() => {
 		readingThinkingRef.current = "";
@@ -1763,6 +1774,7 @@ export function Chat({
 					readingThinking={readingThinkingSeed.value}
 					readingThinkingRevision={readingThinkingSeed.revision}
 					onReadingThinking={applyReadingThinking}
+					onReadingQuote={appendReadingQuote}
 					phase={phases.at(-1) ?? "probe"}
 					turns={turns}
 					contextTokens={contextTokens}
@@ -2000,6 +2012,7 @@ function DockOverlay({
 	readingThinking,
 	readingThinkingRevision,
 	onReadingThinking,
+	onReadingQuote,
 	phase,
 	turns,
 	contextTokens,
@@ -2036,6 +2049,8 @@ function DockOverlay({
 	readingThinking: string;
 	readingThinkingRevision: number;
 	onReadingThinking: (v: string) => void;
+	/** Append a selected passage to the reading draft (shows in the field). */
+	onReadingQuote: (quote: string) => void;
 	/** Session phase at the pending question — scales the thinking field. */
 	phase: Phase3;
 	/** The session's usage log — the stats bar beneath the composer folds it. */
@@ -2436,7 +2451,7 @@ function DockOverlay({
 					{pending && (
 						<QuoteSelection
 							onQuote={(text) => {
-								if (requiresReveal) onReadingThinking(appendQuote(readingThinking, text));
+								if (requiresReveal) onReadingQuote(text);
 								else window.dispatchEvent(new CustomEvent(QUOTE_EVENT, { detail: text }));
 							}}
 						/>

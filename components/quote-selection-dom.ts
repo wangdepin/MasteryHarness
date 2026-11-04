@@ -58,3 +58,18 @@ export function appendQuote(current: string, selected: string): string {
 	const gap = current.endsWith("\n\n") ? "" : current.endsWith("\n") ? "\n" : "\n\n";
 	return `${current}${gap}${quote}\n\n`;
 }
+
+/** The reading-field draft seed (components/chat.tsx): `value` and
+ *  `revision` are what the field syncs to. */
+export interface ReadingSeed {
+	questionId: string | null;
+	value: string;
+	revision: number;
+}
+
+/** Pure: the seed after quoting `quote` into the reading field. Builds on
+ *  `live`, the text as typed so far (the seed's own value only changes on a
+ *  reset), and bumps the revision, which is what makes the field show it. */
+export function seedWithQuote(seed: ReadingSeed, live: string, quote: string): ReadingSeed {
+	return { ...seed, value: appendQuote(live, quote), revision: seed.revision + 1 };
+}

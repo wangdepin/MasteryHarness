@@ -27,6 +27,7 @@ import type { LhViewMessage } from "../src/core/view.ts";
 const exercise = {
 	language: "python" as const,
 	question: "Square every number.",
+	starterCode: "",
 	explanation: "A comprehension.",
 	tests: "assert squares == [1]",
 };

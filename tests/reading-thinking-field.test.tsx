@@ -3,7 +3,14 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import * as ReactDOMClient from "react-dom/client";
+import { flushSync } from "react-dom";
+import { parseHTML } from "linkedom";
 import { ReadingThinkingField } from "../components/reading-thinking.tsx";
+
+const dom = parseHTML("<html><body></body></html>");
+(globalThis as Record<string, unknown>).window = dom.window;
+(globalThis as Record<string, unknown>).document = dom.document;
 
 describe("the reading-thinking field (owner round, 2026-10-07)", () => {
 	it("carries vertical padding — the 1px-scrollbar absorption", () => {
@@ -19,5 +26,21 @@ describe("the reading-thinking field (owner round, 2026-10-07)", () => {
 		assert.ok(html.includes("py-0.5"), "the vertical padding is on the textarea");
 		// The cap survives: growth past max-h-40 still scrolls honestly.
 		assert.ok(html.includes("max-h-40"), "the 160px growth cap stays");
+	});
+
+	it("shows text handed to it with a new revision (a quote from the teaching prose)", () => {
+		const host = document.createElement("div");
+		document.body.appendChild(host);
+		const root = ReactDOMClient.createRoot(host);
+		const field = (value: string, revision: number) => (
+			<ReadingThinkingField value={value} revision={revision} onChange={() => {}} claim={false} />
+		);
+		flushSync(() => root.render(field("", 0)));
+		flushSync(() => root.render(field("> a quoted line\n\n", 1)));
+		const editor = host.querySelector("[role=textbox]");
+		assert.ok(editor, "the field renders its editable surface");
+		assert.ok(editor!.textContent?.includes("> a quoted line"), `the quote is shown, got ${JSON.stringify(editor!.textContent)}`);
+		root.unmount();
+		host.remove();
 	});
 });

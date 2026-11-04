@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { appendQuote, isAutoQuotable, MAX_QUOTE_CHARS, MIN_AUTO_QUOTE_CHARS } from "../components/quote-selection-dom.ts";
+import { appendQuote, isAutoQuotable, MAX_QUOTE_CHARS, MIN_AUTO_QUOTE_CHARS, seedWithQuote } from "../components/quote-selection-dom.ts";
 
 describe("appendQuote — selected prose into the reading-thinking field", () => {
 	it("an empty field becomes the blockquote plus a blank line to type under", () => {
@@ -45,5 +45,23 @@ describe("isAutoQuotable — what quotes itself on mouse-up", () => {
 		assert.equal(isAutoQuotable("😀😀😀😀"), true);
 		assert.equal(isAutoQuotable("😀😀😀"), false);
 		assert.equal(MIN_AUTO_QUOTE_CHARS, 4);
+	});
+});
+
+describe("quoting into the reading field (regression: upstream 0.4.1 draft model)", () => {
+	const seed = { questionId: "q1", value: "", revision: 3 };
+
+	it("builds on the text typed so far, not on the stale seed value", () => {
+		const out = seedWithQuote(seed, "my own idea", "the quoted line");
+		assert.ok(out.value.startsWith("my own idea"), "typed text survives");
+		assert.ok(out.value.includes("> the quoted line"));
+	});
+
+	it("bumps the revision so the field, which owns its draft, shows the quote", () => {
+		assert.equal(seedWithQuote(seed, "", "x quote").revision, 4);
+	});
+
+	it("keeps the question id", () => {
+		assert.equal(seedWithQuote(seed, "", "x quote").questionId, "q1");
 	});
 });
