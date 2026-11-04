@@ -7,7 +7,7 @@
   <a href="#review">Review</a> ·
   <a href="#how-it-works">How it works</a> ·
   <a href="#install">Install</a> ·
-  <a href="docs/development.md">Documentation</a> ·
+  <a href="docs/README.md">Documentation</a> ·
   <a href="https://github.com/wangdepin/MasteryHarness/issues">Issues</a> ·
   <a href="https://discord.gg/5tCHHQEB2e">Discord</a>
 </p>
@@ -62,6 +62,10 @@ This is upstream's design, summarized.
 
 What you are taught accumulates in a knowledge graph of propositions and reasoning chains, with links back to the source sessions. Future teaching and practice sessions read from it instead of starting from scratch.
 
+**Bring your files.** In the desktop app, attach PDFs, photos, or any other file with the paperclip, or drag them in. The file stays where it is: the message carries its path, and the agent reads it from there.
+
+The agent can also research questions in the background, create visual explanations, show your own images in the lesson and mark them up with arrows and labels, and build interactive demonstrations.
+
 ![Knowledge graph](docs/assets/knowledge-graph.png)
 
 The screenshots are from upstream's interface.
@@ -85,10 +89,14 @@ git clone https://github.com/wangdepin/MasteryHarness.git
 cd MasteryHarness
 npm install
 npm run dev        # http://localhost:3000
-npm test           # deterministic, no LLM, no network
+npm test           # fixtures and fake providers
 ```
 
-See the [development guide](docs/development.md) for setup and checks, [architecture](docs/architecture.md) for the shipped runtime, [keyboard reference](docs/keyboard.md) for shortcuts, and [desktop release guide](docs/desktop-release.md) for packaging and updates.
+Once installed, choose your models and start a session with what you want to understand. You can use provider API keys, supported subscription connections in the desktop app, an installed [Claude Code CLI](docs/claude-code.md), or a [custom OpenAI-compatible endpoint](docs/custom-providers.md), including a local model server. Optional dictation and web search use separate service keys. Web research can use a Tavily, Brave, Exa, Firecrawl, or Ollama key in Settings → Providers → Search. Ollama search uses its hosted service, not a local model server.
+
+See [Getting started](docs/getting-started.md) for model setup, dictation, files, and notes imports, and [context, caching, and costs](docs/compaction-accounting.md) for advanced cache preferences.
+
+See the [documentation index](docs/README.md) for all guides, [development](docs/development.md) for setup and checks, [architecture](docs/architecture.md) for the runtime, [keyboard shortcuts](docs/keyboard.md), and [desktop builds and releases](docs/desktop-release.md).
 
 Want the official app? Download LearnHarness from [learnharness.ai](https://learnharness.ai).
 
