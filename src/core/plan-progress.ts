@@ -1,7 +1,7 @@
 /**
  * Plan progress (owner, 2026-10-25): a plan node is LEARNED once one graded
- * check on it was passed — a quiz answered correctly, or a code exercise
- * whose tests passed. The session list shows done/total at a glance.
+ * check on it was passed — a quiz answered correctly. The session list
+ * shows done/total at a glance.
  *
  * Derived from the native record on every read, never stored (the tree
  * carries structure only). Deliberately separate from derivePlanStatusesLh:
@@ -9,26 +9,22 @@
  * is the one place check RESULTS feed the plan.
  *
  * What does not count, by design: an `explain` (the model grades it in prose,
- * the record holds no verdict), a code exercise without tests (no pass
- * signal), an unanswered or dismissed check, an "I don't know", and a check
- * tagged with a node the current plan does not have. Once passed, a node
+ * the record holds no verdict), an unanswered or dismissed check, an
+ * "I don't know", and a check tagged with a node the current plan does not
+ * have. Once passed, a node
  * stays learned — a later miss does not take it back.
  */
 
-import { CODE_EXERCISE_TOOL, isCodeExerciseAnswer } from "./code-exercise.ts";
 import type { PlanProgress, PlanTree } from "./contracts/plan.ts";
 import type { LhMessage } from "./native-messages.ts";
 import type { QuestionAnswerData } from "./question-core.ts";
 
 /** The tools whose result can carry a pass verdict. */
-const GRADED_TOOLS: readonly string[] = ["quiz", CODE_EXERCISE_TOOL];
+const GRADED_TOOLS: readonly string[] = ["quiz"];
 
 /** Did this answer pass its check? `details` is the full graded answer record. */
 function passed(toolName: string, details: unknown): boolean {
 	if (typeof details !== "object" || details === null) return false;
-	if (isCodeExerciseAnswer(details)) {
-		return toolName === CODE_EXERCISE_TOOL && details.graded && details.dismissed !== true && details.lastRun?.passed === true;
-	}
 	const answer = details as Partial<QuestionAnswerData>;
 	return toolName === "quiz" && answer.kind === "quiz" && answer.dismissed !== true && answer.correct === true;
 }

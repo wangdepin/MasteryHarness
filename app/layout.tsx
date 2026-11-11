@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { JetBrains_Mono, Source_Sans_3 } from "next/font/google";
+import { connection } from "next/server";
 import "katex/dist/katex.min.css";
 import "./globals.css";
 import { AppShell, SidebarProvider } from "@/components/sidebar";
@@ -8,12 +9,8 @@ import { ServerEventsProvider } from "@/components/server-events";
 import { AppearanceProvider } from "@/components/settings/appearance";
 import UpdateBanner from "@/components/update-banner";
 import MathCopy from "@/components/math-copy";
-import { MODE_CACHE_KEY } from "@/components/settings/mode";
-
-// Runs before first paint: a user whose last mode was light (or "system"
-// on a light OS) gets <html class="light"> immediately instead of a dark
-// flash until /api/settings answers. The provider keeps the cache current.
-const MODE_BOOT_SCRIPT = `try{var m=localStorage.getItem(${JSON.stringify(MODE_CACHE_KEY)});if(m==="light"||(m==="system"&&matchMedia("(prefers-color-scheme: light)").matches)){var r=document.documentElement;r.classList.remove("dark");r.classList.add("light");r.style.colorScheme="light"}}catch(e){}`;
+import { PluginsProvider } from "@/components/plugins";
+import { readThemeBoot } from "@/src/server";
 
 // Chrome = JetBrains Mono, teaching prose = Source Sans 3, titles = CMU
 // Serif (the bundled lh-cmu @font-face in globals.css — no CDN).
@@ -25,23 +22,33 @@ export const metadata: Metadata = {
 	description: "A teacher agent with a memory — sessions, quizzes, and a knowledge graph of what you know.",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+	// The theme is server-rendered — its class AND its color variables —
+	// so no first frame ever shows the wrong theme. connection(): the
+	// record and the theme files are per-machine disk state — without it a
+	// prerendered route (settings) would bake the BUILD machine's record.
+	await connection();
+	const { appearance, theme, vars } = readThemeBoot();
 	return (
-		<html lang="en" className={`dark ${ui.variable} ${prose.variable}`} suppressHydrationWarning>
-			<head>
-				<script dangerouslySetInnerHTML={{ __html: MODE_BOOT_SCRIPT }} />
-			</head>
+		<html
+			lang="en"
+			className={`${theme.mode} ${ui.variable} ${prose.variable}`}
+			style={vars as React.CSSProperties}
+			suppressHydrationWarning
+		>
 			<body className="min-h-dvh antialiased">
 			{/* The notification channel rides OUTSIDE everything: sidebar, dock,
 				 and pages all subscribe as the polls retire (push S3, 2026-10-02). */}
 			<ServerEventsProvider>
-				<AppearanceProvider>
-					<SidebarProvider>
-						<ActivityProvider>
-							<AppShell>{children}</AppShell>
-						</ActivityProvider>
-					</SidebarProvider>
-				</AppearanceProvider>
+				<PluginsProvider>
+					<AppearanceProvider initialAppearance={appearance} initialTheme={theme}>
+						<SidebarProvider>
+							<ActivityProvider>
+								<AppShell>{children}</AppShell>
+							</ActivityProvider>
+						</SidebarProvider>
+					</AppearanceProvider>
+				</PluginsProvider>
 			</ServerEventsProvider>
 			{/* Auto-update banner (Wave C): fixed card, Electron-only pushes. */}
 			<UpdateBanner />

@@ -13,12 +13,14 @@ import { sourceOrganizationStore } from "../store/source-organization.ts";
 import { jobStore } from "../store/jobs.ts";
 import { oauthCredentialStore } from "../store/oauth-credentials.ts";
 import { settingsStore } from "../store/settings.ts";
+import { themeStore } from "../store/themes.ts";
 import { resolveSettings, type EffectiveSettings } from "../core/settings-resolution.ts";
 import { syncCustomProvider } from "./custom-provider.ts";
 
 // Subscription sign-in tokens: pi-ai reads/refreshes them through this file store.
 bindCredentialStore(oauthCredentialStore);
 
+import { configureWorkerRequestAdmission } from "../agent/worker-request-admission.ts";
 /** The wired adapters. Satisfies core/graph.ts's GraphDeps structurally. */
 export const stores = {
 	chatStore,
@@ -26,6 +28,7 @@ export const stores = {
 	sourceOrganizationStore,
 	jobStore,
 	settingsStore,
+	themeStore,
 };
 
 export type Stores = typeof stores;
@@ -41,6 +44,9 @@ export type Stores = typeof stores;
 export function effectiveSettings(): EffectiveSettings {
 	return resolveSettings(settingsStore.readSettings());
 }
+
+// Runtime policy is supplied at the composition root, never imported by agents.
+configureWorkerRequestAdmission(() => effectiveSettings().agent.workerRequestConcurrency);
 
 // Boot: register the custom endpoint (when configured) into piModels(); the
 // POST /api/custom-provider route re-syncs after every connect.

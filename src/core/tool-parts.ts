@@ -31,8 +31,15 @@ import { Value } from "typebox/value";
 import type { TSchema } from "typebox";
 import { quizDisplayInputSchema, askInputSchema, askOptionProblems, quizInputProblems, explainInputProblems, explainDisplayInputSchema, type AskToolInput, type QuizToolInput, type ExplainToolInput } from "./question-core.ts";
 import { healEncodedArguments } from "./argument-heal.ts";
-import { CODE_EXERCISE_TOOL, codeExerciseDisplayInputSchema, codeExerciseInputProblems, type CodeExerciseDisplayInput } from "./code-exercise.ts";
 import { probeDoneInputSchema, type ProbeDoneInput } from "./contracts/probe.ts";
+import { readPluginQuestionSnapshot, type PluginQuestionSnapshot } from "./plugin-questions.ts";
+
+/** View metadata, not model arguments, owns plugin question role/position. */
+export function posedPluginQuestionOfPart(part: { pluginQuestion?: unknown }): PluginQuestionSnapshot | undefined {
+	const annotation = part.pluginQuestion;
+	if (!annotation || typeof annotation !== "object" || (annotation as { status?: unknown }).status !== "posed") return undefined;
+	return readPluginQuestionSnapshot((annotation as { snapshot?: unknown }).snapshot) ?? undefined;
+}
 
 /** The pi-boundary parse step, mirrored here (live-smoke fix, 2026-09-26):
  *  pi-ai's validateToolArguments runs TypeBox's Value.Convert on the model's
@@ -114,27 +121,13 @@ export function parseExplainInput(input: unknown): ExplainToolInput | undefined 
 	return cleaned;
 }
 
-/** Code-exercise parse for DISPLAY: the display schema (the tool's fields
- *  minus nodeId, which Value.Clean strips) after the boundary's heal, plus
- *  the authoring refinement. Source text is kept as sent: math repair is a
- *  presentation step (ToolContentResponse), and `starterCode` and `tests`
- *  are code, where a backslash is content (`"\n"` must not be "repaired"). */
-export function parseCodeExerciseInput(input: unknown): CodeExerciseDisplayInput | undefined {
-	const healed = healEncodedArguments(input, codeExerciseDisplayInputSchema);
-	const cleaned = boundaryParse<CodeExerciseDisplayInput>(codeExerciseDisplayInputSchema, healed);
-	if (!cleaned) return undefined;
-	if (codeExerciseInputProblems(cleaned).length > 0) return undefined;
-	return cleaned;
-}
-
 /** One display-validity decision for dock authority and recovery. Does not
  * mutate the recorded input or invent missing authoring fields. */
-export function parseQuestionInput(tool: string, input: unknown): QuizToolInput | AskToolInput | ExplainToolInput | CodeExerciseDisplayInput | undefined {
+export function parseQuestionInput(tool: string, input: unknown): QuizToolInput | AskToolInput | ExplainToolInput | undefined {
 	switch (tool) {
 		case "quiz": case "probe": return parseQuizInput(input);
 		case "explain": case "recall": return parseExplainInput(input);
 		case "ask_user_question": return parseAskInput(input);
-		case CODE_EXERCISE_TOOL: return parseCodeExerciseInput(input);
 		default: return undefined;
 	}
 }

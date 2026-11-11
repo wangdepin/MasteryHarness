@@ -27,6 +27,8 @@
 import { spawn } from "node:child_process";
 import { probeEnv, verifyDemoRuntime } from "./smoke-demo-runtime.mjs";
 import { verifyProviderRuntime } from "./smoke-provider-runtime.mjs";
+import { createPluginSmokeFixture, verifyPluginServer } from "./smoke-plugin-runtime.mjs";
+import { verifyCorePlugins } from "./smoke-core-plugins.mjs";
 import { verifyCompressionRuntime } from "./smoke-compression-runtime.mjs";
 import { createRequire } from "node:module";
 import * as fs from "node:fs";
@@ -37,17 +39,19 @@ import * as path from "node:path";
 import { pathToFileURL } from "node:url";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
-const STANDALONE = path.join(ROOT, ".next", "standalone");
-const SERVER = path.join(STANDALONE, "server.js");
+const SOURCE_STANDALONE = path.join(ROOT, ".next", "standalone");
+const ISOLATED_MODE = process.argv.includes("--isolated");
+const BROWSER_MODE = process.argv.includes("--browser");
+let isolatedRoot;
 const ELECTRON_MODE = process.argv.includes("--electron");
 const RUNTIME = ELECTRON_MODE ? createRequire(import.meta.url)("electron") : process.execPath;
 
 const POLL_MS = 500;
 const BOOT_TIMEOUT_MS = 30_000;
 /** GET-only probes — the routes that exercised today's failure class. */
-const PROBES = ["/api/graph", "/api/models", "/api/settings"];
+const PROBES = ["/api/graph", "/api/models", "/api/settings", "/api/plugins"];
 
-if (!fs.existsSync(SERVER)) {
+if (!fs.existsSync(path.join(SOURCE_STANDALONE, "server.js"))) {
 	console.error("[smoke-server] .next/standalone/server.js missing — run next build first.");
 	process.exit(1);
 }
@@ -97,40 +101,41 @@ function get(url) {
 	});
 }
 
-/** The code-exercise runtime: the standalone server must serve Pyodide's
- *  largest file WITH the CORS header its opaque-origin sandbox iframe needs
- *  (next.config.ts headers()). Resolves a problem string, or null when fine. */
-function pyodideProblem(url) {
-	return new Promise((resolve) => {
-		const req = http.get(`${url}/pyodide/pyodide.asm.wasm`, (res) => {
-			res.resume();
-			if (res.statusCode !== 200) resolve(`GET /pyodide/pyodide.asm.wasm → ${res.statusCode} (expected 200)`);
-			else if (res.headers["access-control-allow-origin"] !== "*") resolve("/pyodide/ is served without Access-Control-Allow-Origin: *");
-			else resolve(null);
-		});
-		req.on("error", (err) => resolve(`GET /pyodide/pyodide.asm.wasm failed: ${err.message}`));
-		req.setTimeout(5000, () => {
-			req.destroy();
-			resolve("GET /pyodide/pyodide.asm.wasm timed out");
-		});
-	});
-}
-
 async function main() {
 	await checkOAuthFlows();
+	// Optional source-free proof: run a copy outside the checkout, so missing
+	// dependencies cannot resolve upward into development node_modules.
+	if (ISOLATED_MODE) {
+		isolatedRoot = fs.mkdtempSync(path.join(os.tmpdir(), "lh-isolated-server-"));
+		// Preserve Next's relative external-package links. cpSync otherwise
+		// rewrites them to absolute links back into the original checkout.
+		fs.cpSync(SOURCE_STANDALONE, path.join(isolatedRoot, "standalone"), { recursive: true, verbatimSymlinks: true });
+	}
+	const standalone = isolatedRoot ? path.join(isolatedRoot, "standalone") : SOURCE_STANDALONE;
+	const server = path.join(standalone, "server.js");
 	// HTTP boot alone never imports the dynamically loaded demo engine.
 	// Fail before packaging if its standalone dependency graph is incomplete.
-	verifyDemoRuntime(STANDALONE, RUNTIME);
+	verifyDemoRuntime(standalone, RUNTIME);
 	// /api/models only reads catalogs; initialize the real lazy SDK offline too.
-	verifyProviderRuntime(STANDALONE, RUNTIME);
+	verifyProviderRuntime(standalone, RUNTIME);
 	// A plain GET without Accept-Encoding never exercises gzip backpressure.
-	verifyCompressionRuntime(STANDALONE, RUNTIME);
+	verifyCompressionRuntime(standalone, RUNTIME);
 	const port = await freePort();
 	const url = `http://127.0.0.1:${port}`;
 	const home = fs.mkdtempSync(path.join(os.tmpdir(), "lh-smoke-"));
 	const dataDir = path.join(home, "data");
 	const authFile = path.join(home, "auth.json");
 	fs.writeFileSync(authFile, "{}\n", "utf-8");
+	createPluginSmokeFixture(home);
+	const imports = [];
+	if (ISOLATED_MODE) {
+		// Reject absolute import escapes as well as incidental upward resolution.
+		const guard = path.join(home, "payload-import-guard.mjs");
+		fs.writeFileSync(guard, `import {registerHooks} from 'node:module'; import {realpathSync} from 'node:fs'; import path from 'node:path'; import {fileURLToPath} from 'node:url';
+const roots = ${JSON.stringify([standalone, path.join(home, "data", "plugins")])}.map(p=>realpathSync(p));
+registerHooks({resolve(specifier,context,next){ const result=next(specifier,context); if(result.url.startsWith('file:')) { const file=realpathSync(fileURLToPath(result.url)); if(!roots.some(root=>file===root || file.startsWith(root+path.sep))) throw new Error('Import escaped standalone/plugin payload: '+file); } return result; }});`);
+		imports.push("--import", guard);
+	}
 
 	const tail = []; // rolling log tail for failure diagnosis
 	let tailBytes = 0;
@@ -150,8 +155,8 @@ async function main() {
 	};
 
 	console.log(`[smoke-server] runtime: ${ELECTRON_MODE ? "Electron bundled Node" : "host Node"}`);
-	const child = spawn(RUNTIME, [SERVER], {
-		cwd: STANDALONE,
+	const child = spawn(RUNTIME, [...imports, server], {
+		cwd: standalone,
 		env: {
 			...probeEnv(process.env, home),
 			...(ELECTRON_MODE ? { ELECTRON_RUN_AS_NODE: "1" } : {}),
@@ -208,11 +213,14 @@ async function main() {
 			if (status !== 200) throw new Error(`GET ${route} → ${status} (expected 200)`);
 			console.log(`[smoke-server] GET ${route} → 200`);
 		}
-
-		// 3) The bundled Pyodide runtime (code exercises) is served with CORS.
-		const pyodide = await pyodideProblem(url);
-		if (pyodide) throw new Error(pyodide);
-		console.log("[smoke-server] GET /pyodide/pyodide.asm.wasm → 200 with CORS");
+		await verifyCorePlugins({ root: ROOT, standalone, dataDirectory: dataDir, url });
+		await verifyPluginServer(url, home);
+		if (BROWSER_MODE) {
+			const { verifyPluginBrowser } = await import("./smoke-plugin-browser.mjs");
+			const evidenceDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "lh-plugin-browser-evidence-"));
+			console.log("[smoke-server] browser evidence:", evidenceDirectory);
+			await verifyPluginBrowser(url, { scratchDirectory: evidenceDirectory });
+		}
 	} catch (err) {
 		failed = err;
 	} finally {
@@ -227,12 +235,14 @@ async function main() {
 	if (failed) {
 		console.error(`[smoke-server] FAIL: ${failed.message}`);
 		dumpTail();
-		process.exit(1);
+		throw failed;
 	}
-	console.log("[smoke-server] smoke passed — the packaged server boots and serves.");
+	console.log(`[smoke-server] smoke passed — the packaged server boots and serves${ISOLATED_MODE ? " outside the source checkout" : ""}${BROWSER_MODE ? ", including live plugin UI" : ""}.`);
 }
 
 main().catch((err) => {
 	console.error(`[smoke-server] FAIL: ${err.message}`);
-	process.exit(1);
+	process.exitCode = 1;
+}).finally(() => {
+	if (isolatedRoot) fs.rmSync(isolatedRoot, { recursive: true, force: true });
 });

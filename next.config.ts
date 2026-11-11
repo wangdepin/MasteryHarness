@@ -85,6 +85,9 @@ const nextConfig: NextConfig = {
 			"node_modules/@napi-rs/canvas-*/**/*",
 			// Pi-compatible image resizing runs in an unbundled worker. Photon
 			// loads its colocated WASM through Node, also in packaged Electron.
+			// Side questions (2026-11-02): the side model's base prompt is read
+			// from disk per ask — a directory no agent-composition read names.
+			"src/agent/prompts/side-chat/*.md",
 			"src/agent/image-processing/*.mjs",
 			"src/agent/image-processing/LICENSE",
 			"node_modules/@silvia-odwyer/photon-node/**/*",
@@ -110,14 +113,6 @@ const nextConfig: NextConfig = {
 			"node_modules/json-bigint/**/*",
 			"node_modules/bignumber.js/**/*",
 		],
-	},
-	// The Pyodide runtime (public/pyodide/, copied by scripts/copy-pyodide.mjs)
-	// is loaded by a worker inside an OPAQUE-origin sandboxed iframe
-	// (components/python-runtime-iframe.ts), so every fetch of it is
-	// cross-origin and needs CORS. Static files in public/ ride the standalone
-	// copy in scripts/build-server.mjs — no output tracing involved.
-	async headers() {
-		return [{ source: "/pyodide/:path*", headers: [{ key: "Access-Control-Allow-Origin", value: "*" }] }];
 	},
 	// Framework-free core lives in src/ (plain TS, imported by routes and CLI alike).
 	// The pi engine must stay external: its providers are runtime-loaded Node

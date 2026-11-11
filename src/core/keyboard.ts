@@ -41,7 +41,8 @@ export type KeyAction =
 	| "toggle-user-thinking"
 	| "read-by-sentence"
 	| "scroll-top"
-	| "scroll-bottom";
+	| "scroll-bottom"
+	| "toggle-question-thread";
 
 /** Where the cheat sheet groups an action (display only — dispatch is
  *  global; a seam that isn't mounted simply no-ops). */
@@ -77,6 +78,7 @@ export const KEYBOARD_ACTIONS: readonly KeyActionDef[] = [
 	{ id: "new-session", label: "New session", scope: "global", binding: "mod+n" },
 	{ id: "rename-session", label: "Rename session", scope: "chat", binding: "f2" },
 	{ id: "toggle-user-thinking", label: "Toggle all your thinking", scope: "chat", binding: "mod+t" },
+	{ id: "toggle-question-thread", label: "Question · ask for a nudge (side thread)", scope: "chat", binding: "mod+j" },
 	// Mod+F is surface-scoped: graph node search and session text Find share
 	// one action/binding. Only the currently mounted surface listens.
 	{ id: "find", label: "Find", scope: "global", binding: "mod+f" },
@@ -100,17 +102,20 @@ export const KEYBOARD_ACTIONS: readonly KeyActionDef[] = [
 	{ id: "question-submit", label: "Question · submit", scope: "chat", binding: "enter", displayOnly: true },
 ];
 
+export type KeymapAction = KeyAction | `plugin:${string}:${string}`;
+export type KeymapOverrides = Partial<Record<KeymapAction, string>>;
+export const KEYMAP_CHANGED_EVENT = "lh:keymap-changed";
 const STORAGE_KEY = "lh:keymap";
 
 /** localStorage overrides ({actionId: binding}) — read once per module
  *  instance; the settings editor will write this key. Guarded: SSR and a
  *  corrupt/absent store both fall back to defaults. */
-export function loadOverrides(): Partial<Record<KeyAction, string>> {
+export function loadOverrides(): KeymapOverrides {
 	if (typeof window === "undefined") return {};
 	try {
 		const raw = window.localStorage.getItem(STORAGE_KEY);
 		if (!raw) return {};
-		const parsed = JSON.parse(raw) as Partial<Record<KeyAction, string>>;
+		const parsed = JSON.parse(raw) as KeymapOverrides;
 		if (parsed && typeof parsed === "object") return parsed;
 	} catch {
 		/* corrupt store = defaults */
@@ -121,7 +126,7 @@ export function loadOverrides(): Partial<Record<KeyAction, string>> {
 /** Write the full overrides map ({actionId: binding}) — the settings
  *  editor's rebind/reset persistence. Guarded: SSR no-ops. An empty
  *  map clears the store entirely (all-defaults). */
-export function saveOverrides(overrides: Partial<Record<KeyAction, string>>): void {
+export function saveOverrides(overrides: KeymapOverrides): void {
 	if (typeof window === "undefined") return;
 	try {
 		if (Object.keys(overrides).length) window.localStorage.setItem(STORAGE_KEY, JSON.stringify(overrides));
@@ -129,6 +134,7 @@ export function saveOverrides(overrides: Partial<Record<KeyAction, string>>): vo
 	} catch {
 		/* storage unavailable = overrides don't persist, defaults keep working */
 	}
+	window.dispatchEvent?.(new window.Event(KEYMAP_CHANGED_EVENT));
 }
 
 /** The live key map: defaults with user overrides applied. */
@@ -275,6 +281,7 @@ const KEY_GLYPH: Record<string, string> = {
 	tab: "⇥",
 	escape: "Esc",
 	space: "Space",
+	" ": "Space",
 };
 
 /** Format a binding for display: "mod+shift+f" → "⌘⇧F", "g g" → "gg". A
