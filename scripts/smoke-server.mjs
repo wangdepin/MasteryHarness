@@ -63,7 +63,7 @@ if (!fs.existsSync(path.join(SOURCE_STANDALONE, "server.js"))) {
  * the way pi-ai does, from the packaged payload.
  */
 async function checkOAuthFlows() {
-	const dir = path.join(STANDALONE, "node_modules", "@earendil-works", "pi-ai", "dist", "auth", "oauth");
+	const dir = path.join(SOURCE_STANDALONE, "node_modules", "@earendil-works", "pi-ai", "dist", "auth", "oauth");
 	for (const name of ["anthropic.js", "openai-chatgpt.js"]) {
 		try {
 			await import(pathToFileURL(path.join(dir, name)).href);

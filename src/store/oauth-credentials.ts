@@ -33,7 +33,7 @@ function readMap(file: string): CredentialMap {
 function writeMap(file: string, map: CredentialMap): void {
 	const dir = path.dirname(file);
 	fs.mkdirSync(dir, { recursive: true });
-	const tmp = path.join(dir, `.oauth-credentials.json.tmp-${process.pid}`);
+	const tmp = path.join(/* turbopackIgnore: true */ dir, `.oauth-credentials.json.tmp-${process.pid}`);
 	fs.writeFileSync(tmp, `${JSON.stringify(map, null, "\t")}\n`, { mode: 0o600 });
 	fs.chmodSync(tmp, 0o600);
 	fs.renameSync(tmp, file);
@@ -89,7 +89,7 @@ export function hasOAuthCredential(providerId: string, file: string = OAUTH_FILE
 
 /** The stable id of this app installation (pi-ai login flows send it to
  *  the provider); created on first use, then returned unchanged. */
-export function installationId(file: string = path.join(path.dirname(OAUTH_FILE), "installation-id")): string {
+export function installationId(file: string = path.join(/* turbopackIgnore: true */ path.dirname(OAUTH_FILE), "installation-id")): string {
 	try {
 		const existing = fs.readFileSync(file, "utf-8").trim();
 		if (existing !== "") return existing;
