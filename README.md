@@ -64,7 +64,7 @@ What you are taught accumulates in a knowledge graph of propositions and reasoni
 
 **Bring your files.** In the desktop app, attach PDFs, photos, or any other file with the paperclip, or drag them in. The file stays where it is: the message carries its path, and the agent reads it from there.
 
-**Source material.** (This fork.) A lesson can carry source material: **PDFs** (textbooks, slides, past exams), **text or Markdown** (notes, a syllabus, exam rules), **images** (photographed pages, a whiteboard), and **web links**. Add it with the **Sources** pill under the composer, either on the new-lesson screen or at any time during a lesson.
+**Source material.** (This fork.) A lesson can carry source material: **PDFs** (textbooks, slides, past exams), **EPUB** e-books, **text or Markdown** (notes, a syllabus, exam rules), **images** (photographed pages, a whiteboard), and **web links**. Add it with the **Sources** pill under the composer, either on the new-lesson screen or at any time during a lesson.
 
 - Each item is copied into the lesson (the data folder's `materials/`) and read once in the background with the vision model. That produces a *profile*: the material's targets, contents with page numbers, definitions, notation and terms, its approach, and its exercises. A new lesson waits for its material before the first question.
 - **The material sets the lesson's target and scope.** Teaching uses its definitions, notation and terminology. The teacher may explain things its own way, add perspectives, and change the order, as long as every target in the material is met. It cites the material ("Definition 4.1, p. 1") and says when it goes beyond or differs from it.

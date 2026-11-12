@@ -12,6 +12,7 @@ import {
 import { resolveRoleSpec } from "../core/settings-resolution.ts";
 import { piEngineForSpec } from "../agent/models.ts";
 import { profileMaterial } from "../agent/subagents/material-profiler.ts";
+import { EPUB_MAX_TEXT_BYTES, EpubError, epubToMarkdown } from "../agent/subagents/epub-markdown.ts";
 import { fetchAndExtract } from "../agent/tools/web.ts";
 import { materialTools } from "../agent/tools/materials.ts";
 import { stores } from "./stores.ts";
@@ -104,6 +105,39 @@ export function listMaterials(chatId: string): LessonMaterial[] {
 	return materials;
 }
 
+/** Why an EPUB was refused, in the learner's terms. */
+function epubRefusal(name: string, err: unknown): { ok: false; status: number; error: string } {
+	const reason = err instanceof EpubError ? err.reason : "unreadable";
+	if (reason === "drm") return { ok: false, status: 422, error: `${name} is DRM-protected and cannot be read` };
+	if (reason === "empty") return { ok: false, status: 422, error: `${name} has no readable text` };
+	if (reason === "too-large") {
+		return { ok: false, status: 413, error: `${name} holds more than ${EPUB_MAX_TEXT_BYTES / 1024 / 1024} MB of text` };
+	}
+	return { ok: false, status: 422, error: `${name} is not a readable EPUB` };
+}
+
+/** What the lesson keeps of an upload: the file itself — or, for an EPUB, the Markdown it converts to. */
+function storedCopy(
+	kind: Exclude<LessonMaterial["kind"], "web">,
+	file: { name: string; type: string; bytes: Uint8Array },
+): Result<{ ext: string; bytes: Uint8Array; mimeType?: string }> {
+	if (kind === "epub") {
+		try {
+			return { ok: true, value: { ext: ".md", bytes: new TextEncoder().encode(epubToMarkdown(file.bytes).markdown), mimeType: "text/markdown" } };
+		} catch (err) {
+			return epubRefusal(file.name, err);
+		}
+	}
+	return {
+		ok: true,
+		value: {
+			ext: path.extname(file.name) || (kind === "pdf" ? ".pdf" : kind === "text" ? ".txt" : ".png"),
+			bytes: file.bytes,
+			mimeType: kind === "image" ? (file.type.startsWith("image/") ? file.type : imageMimeType(file.name)) : file.type || undefined,
+		},
+	};
+}
+
 /** Add an uploaded file. */
 export function addUploadedMaterial(
 	chatId: string,
@@ -111,17 +145,17 @@ export function addUploadedMaterial(
 ): Result<LessonMaterial> {
 	if (!lessonExists(chatId)) return { ok: false, status: 404, error: "Unknown chat" };
 	const kind = materialKindFor(file.name, file.type);
-	if (!kind) return { ok: false, status: 415, error: `Unsupported file type: ${file.name} (PDF, text, Markdown or an image)` };
+	if (!kind) return { ok: false, status: 415, error: `Unsupported file type: ${file.name} (PDF, EPUB, text, Markdown or an image)` };
 	if (file.bytes.byteLength === 0) return { ok: false, status: 400, error: `${file.name} is empty` };
 	if (file.bytes.byteLength > MATERIAL_MAX_BYTES) {
 		return { ok: false, status: 413, error: `${file.name} is larger than ${MATERIAL_MAX_BYTES / 1024 / 1024} MB` };
 	}
+	const copy = storedCopy(kind, file);
+	if (!copy.ok) return copy;
 	const material = stores.materialStore.add(chatId, {
 		kind,
 		name: path.basename(file.name),
-		ext: path.extname(file.name) || (kind === "pdf" ? ".pdf" : kind === "text" ? ".txt" : ".png"),
-		bytes: file.bytes,
-		mimeType: kind === "image" ? (file.type.startsWith("image/") ? file.type : imageMimeType(file.name)) : file.type || undefined,
+		...copy.value,
 		addedMidLesson: lessonStarted(chatId),
 	});
 	void startProfile(chatId, material);

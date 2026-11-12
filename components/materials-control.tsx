@@ -33,7 +33,7 @@ import {
 export function materialStatusLine(m: LessonMaterial): string {
 	if (m.status === "reading") return "reading…";
 	if (m.status === "error") return `not read${m.error ? ` — ${m.error}` : ""}`;
-	return m.kind === "pdf" && m.pages ? `${m.pages} pages` : m.kind === "web" ? "web page" : m.kind === "image" ? "image" : "text";
+	return m.kind === "pdf" && m.pages ? `${m.pages} pages` : m.kind === "web" ? "web page" : m.kind === "image" ? "image" : m.kind === "epub" ? "book" : "text";
 }
 
 /** The pill's label. Pure. */
@@ -211,7 +211,7 @@ export function MaterialsControl({ chatId }: { chatId?: string }) {
 							className="h-7 min-w-0 flex-1 rounded-md border border-border bg-background px-1.5 text-xs outline-none placeholder:text-muted-foreground/60 focus:border-muted-foreground/50"
 						/>
 					</div>
-					<div className="px-1 text-[10px] text-muted-foreground/60">PDF, text, Markdown, images, or a web link</div>
+					<div className="px-1 text-[10px] text-muted-foreground/60">PDF, EPUB, text, Markdown, images, or a web link</div>
 					{error && <div className="px-1 text-error" data-testid="materials-error">{error}</div>}
 				</MenuShell>
 			)}

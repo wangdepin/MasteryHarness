@@ -15,6 +15,7 @@ import { InteractionLayersProvider } from "../components/interaction-layers";
 // the shared layers need their provider (AppShell mounts it; renders here have no shell)
 const renderToStaticMarkup = (node: React.ReactElement) => renderBare(<InteractionLayersProvider>{node}</InteractionLayersProvider>);
 import { createFauxCore, fauxAssistantMessage } from "@earendil-works/pi-ai";
+import { book } from "./helpers/epub.ts";
 
 const TMP_DATA = fs.mkdtempSync(path.join(os.tmpdir(), "lh-materials-"));
 process.env.LH_DATA_DIR = TMP_DATA;
@@ -46,6 +47,9 @@ describe("the core", () => {
 	it("tells kinds apart by extension, then MIME", () => {
 		assert.equal(core.materialKindFor("Book.PDF"), "pdf");
 		assert.equal(core.materialKindFor("notes.md"), "text");
+		assert.equal(core.materialKindFor("Book.EPUB"), "epub");
+		assert.equal(core.materialKindFor("blob", "application/epub+zip"), "epub");
+		assert.ok(core.MATERIAL_ACCEPT.split(",").includes(".epub"));
 		assert.equal(core.materialKindFor("page.jpeg"), "image");
 		assert.equal(core.materialKindFor("blob", "image/webp"), "image");
 		assert.equal(core.materialKindFor("slides.pptx"), null);
@@ -186,6 +190,42 @@ describe("the service", () => {
 		assert.match(turn.section, /could not be built/);
 		assert.deepEqual(turn.tools.map((t) => t.name).sort(), ["material_read", "material_search"]);
 		assert.equal(added.ok && added.value.addedMidLesson, undefined, "a lesson with no turns yet: not mid-lesson");
+	});
+});
+
+describe("an EPUB (converted to Markdown when added)", () => {
+	const upload = (chatId: string, name: string, bytes: Uint8Array) => service.addUploadedMaterial(chatId, { name, type: "application/epub+zip", bytes });
+
+	it("is stored as its Markdown and then searched, read and described like a text", async () => {
+		const chat = chatStore.createChat("A book");
+		const added = upload(chat.id, "calculus.epub", book({ chapters: { "ch1.xhtml": "<h1>Limits</h1><p>The Link Rule is stated here.</p>" } }));
+		assert.ok(added.ok);
+		const m = added.value;
+		assert.deepEqual([m.kind, m.name, m.file, m.mimeType], ["epub", "calculus.epub", "source.md", "text/markdown"]);
+		assert.equal(
+			fs.readFileSync(materialStore.filePath(chat.id, m), "utf8"),
+			"# Calculus Notes\n\nAuthor: Ada Writer\n\n# Limits\n\nThe Link Rule is stated here.\n",
+		);
+		await service.waitForMaterials(chat.id, 5000);
+		const tools = materialTools({ chatId: chat.id, store: materialStore });
+		assert.match(await call(tools.material_search!, { query: "Link Rule", literal: true }), /\[calculus\.epub, line 7\]/);
+		assert.match(await call(tools.material_read!, { material: m.id, lines: "5-5" }), /5: # Limits/);
+		assert.match(core.materialBlock(m, "/p/source.md"), /kind="e-book \(EPUB converted to Markdown; figures omitted\)"/);
+		assert.equal(materialStatusLine({ ...m, status: "ready" }), "book");
+	});
+
+	it("a book that cannot be read is refused in the learner's terms, and nothing is stored", () => {
+		const chat = chatStore.createChat("Refusals");
+		const encryption = '<encryption xmlns:enc="http://www.w3.org/2001/04/xmlenc#"><enc:EncryptedData><enc:CipherData><enc:CipherReference URI="OEBPS/ch1.xhtml"/></enc:CipherData></enc:EncryptedData></encryption>';
+		const chapters = { "ch1.xhtml": "<p>Text.</p>" };
+		for (const [name, bytes, status, error] of [
+			["locked.epub", book({ chapters, extra: { "META-INF/encryption.xml": encryption } }), 422, "locked.epub is DRM-protected and cannot be read"],
+			["broken.epub", new TextEncoder().encode("not a zip"), 422, "broken.epub is not a readable EPUB"],
+			["blank.epub", book({ chapters: { "cover.xhtml": '<img src="images/cover.jpg"/>' } }), 422, "blank.epub has no readable text"],
+		] as const) {
+			assert.deepEqual(upload(chat.id, name, bytes), { ok: false, status, error });
+		}
+		assert.deepEqual(service.listMaterials(chat.id), []);
 	});
 });
 

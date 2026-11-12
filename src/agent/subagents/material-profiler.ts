@@ -5,6 +5,7 @@ import { PDF_READING_DOCTRINE, runPdfReaderAgent } from "./pdf-reader.ts";
 import { pdfInfo } from "./pdf-ops.ts";
 import { normalizePhoto } from "../image-processing/normalize.ts";
 import type { MaterialKind } from "../../core/materials.ts";
+import { digestLongText } from "./long-text-digest.ts";
 
 /**
  * The source-material profiler (fork addition, 2026-10-24): reads one
@@ -56,14 +57,15 @@ First transcribe it completely: every word, formula (as LaTeX between $ signs), 
 
 ${PROFILE_DELIVERABLE}`;
 
-/** Text past this many characters is cut (with a note) before profiling —
- *  roughly 40k tokens, far beyond notes or a syllabus. */
+/** Text past this many characters is not shown whole — roughly 40k
+ *  tokens, far beyond notes or a syllabus. A book is shown as its outline
+ *  digest (long-text-digest.ts); a text with no headings is cut. */
 const TEXT_LIMIT = 160_000;
 
 export interface MaterialProfileInput {
 	kind: MaterialKind;
 	name: string;
-	/** The stored copy (pdf, image, text) — or the extracted Markdown (web). */
+	/** The stored copy (pdf, image, text) — or the extracted Markdown (web, epub). */
 	path: string;
 	mimeType?: string;
 }
@@ -164,17 +166,24 @@ export async function profileMaterial(input: MaterialProfileInput, opts: Materia
 		const { transcript, profile } = splitImageReply(reply);
 		return { transcript, profile: profileBody(profile) };
 	}
-	// text and web (its extracted Markdown)
+	// text, and web and epub (their extracted Markdown)
 	opts.onActivity?.(`reading ${input.name}`);
-	let text = await fs.readFile(input.path, "utf8");
+	const text = await fs.readFile(input.path, "utf8");
 	if (!text.trim()) throw new Error("the material is empty");
-	const cut = text.length > TEXT_LIMIT;
-	if (cut) text = text.slice(0, TEXT_LIMIT);
+	const { shown, note } = withinTextLimit(text);
 	const profile = await completeOnce(opts, TEXT_PROFILE_INSTRUCTIONS, [
-		{
-			type: "text",
-			text: `The material: "${input.name}"${cut ? ` (only its first ${TEXT_LIMIT} characters are shown)` : ""}.\n\n<material>\n${text}\n</material>`,
-		},
+		{ type: "text", text: `The material: "${input.name}"${note}.\n\n<material>\n${shown}\n</material>` },
 	]);
 	return { profile: profileBody(profile) };
+}
+
+/** What of a text the profiling call sees, and the note that says so: all of it, its outline digest, or its start. Pure. */
+export function withinTextLimit(text: string, limit = TEXT_LIMIT): { shown: string; note: string } {
+	if (text.length <= limit) return { shown: text, note: "" };
+	const digest = digestLongText(text, limit);
+	if (!digest) return { shown: text.slice(0, limit), note: ` (only its first ${limit} characters are shown)` };
+	return {
+		shown: digest,
+		note: ` (${text.length} characters, too long to show whole: below is an outline of it — every chapter's heading, the headings beneath it and its opening — not the full text)`,
+	};
 }
