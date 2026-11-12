@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { restoreLiteralNewlines } from "../src/core/literal-newlines.ts";
+import { repairMathForDisplay } from "../src/core/math-delims.ts";
 
 describe("restoreLiteralNewlines — display-time repair of double-escaped newlines", () => {
 	it("turns literal \\n into real line breaks (the reported question)", () => {
@@ -32,11 +33,15 @@ describe("restoreLiteralNewlines — display-time repair of double-escaped newli
 		assert.equal(restoreLiteralNewlines(""), "");
 	});
 
-	it("restores a code block that arrived on ONE line, and \\n before a plain word", () => {
-		const q = 'Consider this:\\n\\n```python\\nx = [1]\\nwhile x:\\n    x.pop()\\n```\\nAfter this loop, what is len(x)?';
+	it("leaves a code block that arrived on ONE line whole, and restores \\n before a plain word", () => {
+		const fence = "```python\\nx = [1]\\nwhile x:\\n    x.pop()\\n```";
+		const q = "Consider this:\\n\\n" + fence + "\\nAfter this loop, what is len(x)?";
+		const restored = restoreLiteralNewlines(q);
+		assert.equal(restored, "Consider this:\n\n" + fence + "\nAfter this loop, what is len(x)?");
 		assert.equal(
-			restoreLiteralNewlines(q),
-			'Consider this:\n\n```python\nx = [1]\nwhile x:\n    x.pop()\n```\nAfter this loop, what is len(x)?',
+			repairMathForDisplay(restored),
+			"Consider this:\n\n```python\nx = [1]\nwhile x:\n    x.pop()\n```\nAfter this loop, what is len(x)?",
+			"tool-content recovery decodes the block",
 		);
 	});
 
