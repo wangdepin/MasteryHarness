@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { uploadDraftMaterials } from "@/components/materials-client";
 import { SurfaceRegion, usePageSurfaceBoundary, useSurfaceChromeStyle } from "./plugin-surfaces";
 import { Conversation, ConversationContent, ConversationEmptyState } from "@/components/ai-elements/conversation";
 import { Composer } from "@/components/composer";
@@ -57,13 +58,17 @@ export async function startDraftSession(
 	// from the pick bar creates its session WITH the graph context — the
 	// same contract as the home screen's practice send (the marker with
 	// [id] name: statement lines, target validation's truth set).
-	return starter.start(
+	const target = await starter.start(
 		mode === "practice"
 			? { title: t, kind: "practice", ...(picks && picks.length > 0 ? { graphContext: { propositions: picks } } : {}) }
 			: { title: t },
 		fetchLike,
 		settingsIdentity,
 	);
+	// The draft's source material rides in right after creation (fork
+	// addition); the chat page holds the first message until it is read.
+	await uploadDraftMaterials(target.slice("/chat/".length), fetchLike);
+	return target;
 }
 
 /** The pure shell (no router) — the render-test seam: the draft view's

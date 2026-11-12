@@ -118,3 +118,5 @@ export * from "./plugin-submissions.ts";
 export type * from "./plugin-ui.ts";
 export type * from "./plugin-tree.ts";
 export * from "./plugin-agents.ts";
+// Lesson source material (fork addition, 2026-10-24).
+export * from "./materials.ts";

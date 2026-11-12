@@ -148,6 +148,10 @@ export interface AgentBuildOptions {
 	 *  fresh per turn, honoring enabled overrides (switch on + file
 	 *  exists); absent → the cached pure-source composition. */
 	promptSwitches?: Record<string, boolean>;
+	/** The lesson's source material (fork addition): its system-prompt
+	 *  section (core/materials.ts materialsPromptSection) and the lookup
+	 *  tools (tools/materials.ts), added to every conversation agent. */
+	materials?: { section: string; tools: AgentTool<any>[] };
 	/** Native conversation identity: the existing persisted chat id, reused
 	 * across reconstructed prober, teacher, and practice Agents.
 	 * Debug: when set AND LH_PROVIDER_EVENTS=1, raw provider stream events
@@ -211,9 +215,11 @@ function baseAgentOptions(kind: AgentKind, opts: AgentBuildOptions, tools: Agent
 	const stopper = makeQuestionStopper(kind);
 	const narrationGuard = narrationGuardApplies(kind, engine.model, opts.tools !== undefined);
 	const narrationHooks = narrationGuard ? makeNarrationGuard() : undefined;
-	const composedPrompt = opts.promptSwitches
+	const instructions = opts.promptSwitches
 		? composeInstructions(kind, opts.promptSwitches)
 		: composedInstructions[kind]!;
+	const composedPrompt = opts.materials ? `${instructions}\n\n${opts.materials.section}` : instructions;
+	if (opts.materials) tools = [...tools, ...opts.materials.tools];
 	const builtinPrompt = narrationGuard ? `${composedPrompt}\n\n---\n\n${SEND_TO_USER_DELIVERY_RULE}` : composedPrompt;
 	// Bind native read and preserve the kind/model-aware Claude output gate
 	// before resolving additive plugins. Explicit registries remain caller-owned.

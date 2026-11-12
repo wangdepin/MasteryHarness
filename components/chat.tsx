@@ -2,6 +2,7 @@
 
 import { createContext, Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
+import { waitForMaterialsRead } from "@/components/materials-client";
 import { useChatSession } from "@/components/session";
 import { usePlugins } from "./plugins";
 import { PluginSubmissionRunner, SubmissionModelEpoch, type SubmissionAttempt } from "./plugin-submission-runner";
@@ -850,7 +851,10 @@ export function Chat({
 		}
 		setOpeningError(false);
 		draftRef.current = prompt; // The existing 503 flow must restore it too.
-		void prepareText(captureNative ? undefined : prompt, () => {
+		// A new lesson's source material is read first (fork addition): the
+		// first turn sets the target from its profiles. Returns at once when
+		// the lesson has none.
+		void waitForMaterialsRead(chatId).then(() => prepareText(captureNative ? undefined : prompt, () => {
 			clearOpeningPrompt(chatId);
 			openingDraftRef.current = null;
 			if (draftRef.current === submitted) draftRef.current = null;
@@ -859,7 +863,7 @@ export function Chat({
 			const saved = stashOpeningPrompt(chatId, captured, true);
 			if (!saved) setOpeningError(true);
 			return saved;
-		}).then(accepted => {
+		})).then(accepted => {
 			if (!accepted && openingMountedRef.current && openingDraftRef.current === prompt && !textRef.current) {
 				applyText(prompt);
 			}

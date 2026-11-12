@@ -7,6 +7,7 @@
 export * from "./chat-handler.ts";
 export * from "./events-stream.ts";
 export * from "./chats.ts";
+export { addLinkMaterial, addUploadedMaterial, listMaterials, removeMaterial } from "./materials.ts";
 export * from "./graph.ts";
 export * from "./review.ts";
 export * from "./source-organization.ts";

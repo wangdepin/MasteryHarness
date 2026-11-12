@@ -150,6 +150,7 @@ function finishChatDeletion(chatId: string, mode: ChatDeleteMode): Extract<ChatD
 
 function finishChatRecordDeletion(chatId: string): number {
 	const jobsRemoved = stores.jobStore.deleteJobsForChat(chatId);
+	stores.materialStore.removeAll(chatId); // its source material dies with it
 	if (stores.chatStore.deleteChat(chatId)) {
 		discardChatDeliveries(chatId);
 		clearTurnFailure(chatId);

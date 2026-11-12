@@ -5,6 +5,7 @@ import { CLAUDE_CODE_PROVIDER, sessionCacheHitRate, subscriptionLabels, subscrip
 import { formatTokens, formatUsd, planCostLabel, prettyModel } from "@/components/usage-format";
 import { ModelControl, catalogLimits, useModelCatalog } from "@/components/model-picker";
 import { usePopoverDismiss } from "@/components/popover-dismiss";
+import { MaterialsControl } from "@/components/materials-control";
 import { INTERACTION_LAYER_Z_BASE } from "@/components/host-dialog";
 
 export function formatContextMeasurement(tokens: number | null, limit: number | null): string {
@@ -207,6 +208,8 @@ export function StatsBar({
 			{/* The model + thinking control — one controller for the conversation
 			    agents (prober/teacher); the record's `turns` above still folds
 			    the ACTUAL models billed, regardless of what the picker says. */}
+			{/* The lesson's source material (fork addition). */}
+			<MaterialsControl chatId={chatId} />
 			<ModelControl chatId={chatId} onModelChange={modelChanged} />
 		</div>
 	);

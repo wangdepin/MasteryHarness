@@ -80,7 +80,7 @@ function htmlToMarkdown(html: string): { title: string; content: string } | null
 	return { title: article.title ?? "", content: markdown };
 }
 
-async function fetchAndExtract(url: string): Promise<string> {
+export async function fetchAndExtract(url: string): Promise<string> {
 	const resp = await safeFetch(url, {
 		headers: {
 			"User-Agent": USER_AGENT,

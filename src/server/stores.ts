@@ -11,6 +11,7 @@ import { chatStore } from "../store/chats.ts";
 import { graphStore } from "../store/graph.ts";
 import { sourceOrganizationStore } from "../store/source-organization.ts";
 import { jobStore } from "../store/jobs.ts";
+import { materialStore } from "../store/materials.ts";
 import { oauthCredentialStore } from "../store/oauth-credentials.ts";
 import { settingsStore } from "../store/settings.ts";
 import { themeStore } from "../store/themes.ts";
@@ -29,6 +30,8 @@ export const stores = {
 	jobStore,
 	settingsStore,
 	themeStore,
+	// Lesson source material (fork addition, 2026-10-24).
+	materialStore,
 };
 
 export type Stores = typeof stores;

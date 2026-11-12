@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { uploadDraftMaterials } from "@/components/materials-client";
 import { SurfaceRegion, usePageSurfaceBoundary, useSurfaceChromeStyle } from "./plugin-surfaces";
 import { CornerDownLeftIcon, DumbbellIcon } from "lucide-react";
 import { GraphView } from "@/components/graph-view";
@@ -157,6 +158,9 @@ export function Home({
 				...(mode === "practice" ? { kind: "practice" } : {}),
 				...(practiceProps.length > 0 ? { graphContext: { propositions: practiceProps } } : {}),
 			}, fetch, JSON.stringify(catalog?.slots.strong));
+			// The draft's source material rides in right after creation (fork
+			// addition); the chat page holds the first message until it is read.
+			await uploadDraftMaterials(target.slice("/chat/".length));
 			router.push(target);
 		} catch {
 			startingRef.current = false;

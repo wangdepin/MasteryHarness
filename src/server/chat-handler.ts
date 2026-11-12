@@ -63,6 +63,7 @@ import { COMPACTION_RESERVE_TOKENS } from "../core/compaction.ts";
 import { catalogContextLimits, refreshConnectionCatalog } from "./model-catalog.ts";
 import { emit } from "../core/events.ts";
 import { settledTurnResponse } from "./turn-runs.ts";
+import { materialsForTurn } from "./materials.ts";
 import { asAgentMessages, type LhMessage } from "../core/native-messages.ts";
 import { QUESTION_TOOLS } from "../core/pending.ts";
 import {
@@ -725,6 +726,9 @@ export async function handleChatInput(
 		// point as the tool delta — the agent layer composes the system
 		// prompt fresh per turn, swapping in any enabled override segments.
 		promptSwitches: effective.agent.prompts,
+		// The lesson's source material (fork addition): profiles in the
+		// prompt + the lookup tools; absent when the lesson has none.
+		materials: materialsForTurn(chatId),
 	};
 	// PRACTICE BRANCH (owner design, 2026-10-04): a kind:"practice"
 	// session builds the practitioner from turn 1 — no prober→teacher

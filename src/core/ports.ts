@@ -34,6 +34,7 @@ import type {
 } from "./contracts.ts";
 import type { UserSettings } from "./settings.ts";
 import type { Theme, ThemeFile } from "./themes.ts";
+import type { LessonMaterial, MaterialKind } from "./materials.ts";
 
 // ─── Plugin sessions — plugin-owned data, separate from core chats ──────────
 
@@ -288,3 +289,37 @@ export interface AuthStore {
 	deleteAuthVar(name: string): void;
 }
 
+/**
+ * Lesson source material (fork addition, 2026-10-24) — the sole writer of
+ * data/materials/<chatId>/: an index of LessonMaterial records plus one
+ * folder per material holding the stored copy (and derived text: a web
+ * page's or an image's content.md). Adapter: src/store/materials.ts.
+ */
+export interface MaterialStore {
+	/** The lesson's materials, oldest first ([] when none). */
+	list(chatId: string): LessonMaterial[];
+	/** Store a copy and index it with status "reading". */
+	add(
+		chatId: string,
+		input: {
+			kind: MaterialKind;
+			name: string;
+			/** The stored copy's extension, with its dot (".pdf"). */
+			ext: string;
+			bytes: Uint8Array;
+			url?: string;
+			mimeType?: string;
+			addedMidLesson?: boolean;
+		},
+	): LessonMaterial;
+	/** Merge fields into one record; null when it no longer exists. */
+	update(chatId: string, id: string, patch: Partial<Omit<LessonMaterial, "id">>): LessonMaterial | null;
+	/** Delete one material (record + folder). False when unknown. */
+	remove(chatId: string, id: string): boolean;
+	/** Delete every material of a lesson (its deletion). */
+	removeAll(chatId: string): void;
+	/** The stored copy's absolute path. */
+	filePath(chatId: string, material: LessonMaterial): string;
+	/** A derived file next to the copy (e.g. "content.md"). */
+	auxPath(chatId: string, id: string, name: string): string;
+}

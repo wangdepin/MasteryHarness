@@ -12,6 +12,8 @@ Paths below are relative to the selected **data** directory:
 
 ```text
 chats/<session-id>.json    Full session: messages, optional plan, usage metadata
+materials/<session-id>/    A lesson's source material: index.json (name, kind, status, the
+                           model-written profile) + one folder per item with its stored copy
 graph/nodes.jsonl          Proposition assertions; IDs can repeat
 graph/chains.jsonl         Reasoning-chain assertions; logical chains can repeat
 graph/sources.json        Imported-note source metadata, keyed by source ID
