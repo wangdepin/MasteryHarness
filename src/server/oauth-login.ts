@@ -8,8 +8,10 @@
  */
 import type { AuthEvent, AuthInteraction, AuthPrompt } from "@earendil-works/pi-ai";
 import { piModels } from "../agent/models.ts";
-import { SUBSCRIPTION_PROVIDERS, type OAuthLoginView, type OAuthProviderRow } from "../core/oauth-login.ts";
-import { hasOAuthCredential, installationId } from "../store/oauth-credentials.ts";
+import { SUBSCRIPTION_PROVIDERS, type LeftoverSignIn, type OAuthLoginView, type OAuthProviderRow } from "../core/oauth-login.ts";
+import { providerLabel } from "../core/provider-pause.ts";
+import { hasOAuthCredential, installationId, oauthCredentialProviders, oauthCredentialStore } from "../store/oauth-credentials.ts";
+import { providerPaused, setProviderPaused } from "./provider-pause.ts";
 
 interface Session {
 	view: OAuthLoginView;
@@ -133,4 +135,21 @@ export function oauthProviderRows(): OAuthProviderRow[] {
 		rows.push({ id: offered.id, label: offered.label, planName: oauth.name, signedIn: hasOAuthCredential(offered.id) });
 	}
 	return rows;
+}
+
+/** Stored sign-ins for providers no longer offered (core LeftoverSignIn). */
+export function leftoverSignIns(): LeftoverSignIn[] {
+	return oauthCredentialProviders()
+		.filter((id) => !SUBSCRIPTION_PROVIDERS.some((offered) => offered.id === id))
+		.map((id) => ({ id, label: providerLabel(id) }));
+}
+
+/** Delete one leftover sign-in and its paused state. False (nothing
+ *  changed) unless `provider` is a leftover right now — an offered sign-in
+ *  is signed out through its own row, never here. */
+export async function removeLeftoverSignIn(provider: string): Promise<boolean> {
+	if (!leftoverSignIns().some((s) => s.id === provider)) return false;
+	await oauthCredentialStore.delete(provider);
+	if (providerPaused(provider)) setProviderPaused(provider, false);
+	return true;
 }

@@ -6,6 +6,7 @@ import { notifySettingsSaved } from "@/components/settings-signal";
 import { ConnectionDialog, ConnectionFooter, ConnectionRow } from "./connection-controls";
 import { ChatGPTConnection } from "./chatgpt-connection";
 import { Toggle } from "./controls";
+import { PausableLabel, ProviderPauseSwitch } from "./provider-pause";
 import { useNativeSubscriptionBridge } from "./subscription-client";
 import type { CloseOutcome } from "@/components/interaction-layers";
 
@@ -121,11 +122,14 @@ export function NativeSubscriptionUIProvider({ children }: { children: React.Rea
 	</Context.Provider>;
 }
 
-export function NativeSubscriptionConnection({ providerId, labelClassName }: { providerId: NativeSubscriptionProviderId; labelClassName?: string }) {
+export function NativeSubscriptionConnection({ providerId, labelClassName, pausable = false }: { providerId: NativeSubscriptionProviderId; labelClassName?: string; pausable?: boolean }) {
 	const ui = useContext(Context), descriptor = NATIVE_SUBSCRIPTIONS.find((p) => p.providerId === providerId)!;
 	const status = ui.statuses.find((s) => s.providerId === providerId) ?? emptySubscriptionStatus(providerId);
+	const pauseIds = status.connectionId ? [descriptor.logicalId] : [];
 	return <div className="flex flex-col gap-2" data-testid={`${providerId}-connection`}>
-		<ConnectionRow label={descriptor.label} labelClassName={labelClassName} action={status.connectionId ? "Manage…" : "Connect"} disabled={ui.busy || !status.available || ui.statuses.some((s) => s.pending)} onAction={() => ui.open(providerId)} />
+		<ConnectionRow label={pausable ? <PausableLabel ids={pauseIds}>{descriptor.label}</PausableLabel> : descriptor.label} labelClassName={labelClassName} action={status.connectionId ? "Manage…" : "Connect"} disabled={ui.busy || !status.available || ui.statuses.some((s) => s.pending)} onAction={() => ui.open(providerId)}>
+			{pausable && <ProviderPauseSwitch ids={pauseIds} label={descriptor.label} />}
+		</ConnectionRow>
 		{status.error && <p role="alert" className="text-xs text-error">{status.error}</p>}
 	</div>;
 }
@@ -133,7 +137,7 @@ export function SubscriptionConnections({ setup = false }: { setup?: boolean }) 
 	// Providers uses ordinary settings-label typography. The setup surface
 	// keeps its existing compact labels; dialogs and actions are untouched.
 	const labelClassName = setup ? undefined : "font-prose text-(length:--lh-prose-size) text-foreground";
-	return <div className="space-y-3" data-testid="subscription-connections"><ChatGPTConnection setup={setup} labelClassName={labelClassName} />{NATIVE_SUBSCRIPTIONS.map((p) => <NativeSubscriptionConnection key={p.providerId} providerId={p.providerId} labelClassName={labelClassName} />)}</div>;
+	return <div className="space-y-3" data-testid="subscription-connections"><ChatGPTConnection setup={setup} labelClassName={labelClassName} pausable={!setup} />{NATIVE_SUBSCRIPTIONS.map((p) => <NativeSubscriptionConnection key={p.providerId} providerId={p.providerId} labelClassName={labelClassName} pausable={!setup} />)}</div>;
 }
 export function NativeSubscriptionBackgroundAccess({ provider }: { provider: string | undefined }) {
 	const ui = useContext(Context), descriptor = NATIVE_SUBSCRIPTIONS.find((p) => p.logicalId === provider);

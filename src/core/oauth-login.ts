@@ -31,6 +31,15 @@ export interface OAuthLoginView {
 	error?: string;
 }
 
+/** A stored sign-in for a provider this app no longer offers sign-in for
+ *  (an older version's ChatGPT sign-in, kept as `openai`). It still makes its
+ *  provider's models available, so Settings → Providers lists it to pause or
+ *  remove; it cannot be signed in again from the app. */
+export interface LeftoverSignIn {
+	id: string;
+	label: string;
+}
+
 /** One provider row of GET /api/auth/oauth. */
 export interface OAuthProviderRow {
 	id: string;

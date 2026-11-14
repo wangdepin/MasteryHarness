@@ -87,6 +87,11 @@ export function hasOAuthCredential(providerId: string, file: string = OAUTH_FILE
 	return readMap(file)[providerId]?.type === "oauth";
 }
 
+/** Every provider id holding a subscription (OAuth) credential, sorted. */
+export function oauthCredentialProviders(file: string = OAUTH_FILE): string[] {
+	return Object.entries(readMap(file)).filter(([, c]) => c.type === "oauth").map(([id]) => id).sort();
+}
+
 /** The stable id of this app installation (pi-ai login flows send it to
  *  the provider); created on first use, then returned unchanged. */
 export function installationId(file: string = path.join(/* turbopackIgnore: true */ path.dirname(OAUTH_FILE), "installation-id")): string {

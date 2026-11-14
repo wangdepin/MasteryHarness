@@ -32,6 +32,7 @@ import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 import type { CacheRetention } from "@earendil-works/pi-ai";
 import { AUTH_PROVIDER_KEYS } from "./auth-keys.ts";
 import { CLAUDE_CODE_PROVIDER } from "./contracts/claude-code.ts";
+import { PROVIDER_PAUSED_TAIL, providerPausedMessage, sanitizePausedProviders } from "./provider-pause.ts";
 import type { ModelRole } from "../../config.ts";
 import type { ChatSettings } from "./contracts/chat.ts";
 import { isSearchEngineId, type SearchEngineId } from "./search.ts";
@@ -180,15 +181,19 @@ export function providerKeyMissing(provider: string, slots: ModelSlotName[]): Pr
  * scary-error) — the envelope's home module owns the string so the
  * writer and the matcher can never drift. */
 export function isProviderKeyRefusal(error: string | undefined): boolean {
-	return !!error && (error.endsWith(PROVIDER_KEY_MISSING_TAIL) || error === CLAUDE_CODE_UNAVAILABLE);
+	return !!error && (error.endsWith(PROVIDER_KEY_MISSING_TAIL) || error.endsWith(PROVIDER_PAUSED_TAIL) || error === CLAUDE_CODE_UNAVAILABLE);
+}
+/** The paused-provider refusal: the key-missing envelope family (same code,
+ * so clients repair it the same way — pick another model), paused wording. */
+export function providerPausedRefusal(provider: string, slots: ModelSlotName[]): ProviderKeyMissing {
+	return { error: providerPausedMessage(provider), code: PROVIDER_KEY_MISSING_CODE, provider, slots };
 }
 /** The typed throw for in-process seams (extraction pipeline) — the
  * ProviderKeyMissing sibling of ModelsNotConfiguredError: callers catch
  * it to skip honestly (trigger) or surface the 503 envelope (routes). */
 export class ProviderKeyMissingError extends Error {
 	readonly envelope: ProviderKeyMissing;
-	constructor(provider: string, slots: ModelSlotName[]) {
-		const envelope = providerKeyMissing(provider, slots);
+	constructor(envelope: ProviderKeyMissing) {
 		super(envelope.error);
 		this.name = "ProviderKeyMissingError";
 		this.envelope = envelope;
@@ -496,6 +501,9 @@ export interface UserSettings {
 	dictation?: DictationSettings;
 	/** Explicit app-wide opt-in; absent/invalid is off, including older records. */
 	claudeCode?: { enabled?: boolean };
+	/** Model sources switched off (core/provider-pause.ts): credentials kept,
+	 *  models hidden, new requests refused. Absent = everything on. */
+	pausedProviders?: string[];
 	agent?: AgentSettings;
 	/** The strong/cheap/vision model slots (model slots wave, 2026-09-20). */
 	models?: ModelsSettings;
@@ -878,6 +886,7 @@ export function sanitizeUserSettings(raw: unknown): UserSettings | null {
 			&& typeof (raw as Record<string, unknown>).enabled === "boolean"
 			? { enabled: (raw as { enabled: boolean }).enabled } : {};
 	}
+	if (r.pausedProviders !== undefined) out.pausedProviders = sanitizePausedProviders(r.pausedProviders);
 	if (r.agent !== null && typeof r.agent === "object" && !Array.isArray(r.agent)) {
 		out.agent = sanitizeAgent(r.agent as Record<string, unknown>);
 	}

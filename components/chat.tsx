@@ -937,7 +937,7 @@ export function Chat({
 				draftRef.current = null;
 			}
 			clearError();
-			if (keyRefused && catalogRef.current?.providers.some((p) => p.keyPresent)) openModelPicker();
+			if (keyRefused && catalogRef.current?.providers.some((p) => p.keyPresent && !p.paused)) openModelPicker();
 			else setSetupOpen(true);
 		})();
 		return () => {

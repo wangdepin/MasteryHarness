@@ -8,7 +8,7 @@ import type { PluginCallPurpose, PluginModelSpec } from "../core/plugin-agents.t
 import type { PluginInference, PluginInferenceOptions, PluginInferenceRequest } from "../core/plugins.ts";
 import type { ModelCatalogResponse } from "../core/contracts/models.ts";
 import { NATIVE_SUBSCRIPTIONS } from "../core/contracts/subscriptions.ts";
-import { providerKeyMissing } from "../core/settings.ts";
+import { providerKeyMissing, providerPausedRefusal } from "../core/settings.ts";
 import { validatePluginInferenceOptions as optionsFor } from "../core/plugin-validation.ts";
 
 /** Complete dependency seam for off-network tests; production defaults are lazy
@@ -93,7 +93,12 @@ export function createPluginInference(
 	const available = async (spec: PluginModelSpec, caller: AbortSignal) => {
 		const deps = await bounded(dependencies(), caller);
 		const listing = await bounded(deps.catalog(), caller);
-		if (!listing.providers.some((p) => p.id === spec.provider)) throw new Error(`Unknown model provider: ${spec.provider}`);
+		const row = listing.providers.find((p) => p.id === spec.provider);
+		if (!row) throw new Error(`Unknown model provider: ${spec.provider}`);
+		if (row.paused) {
+			const paused = providerPausedRefusal(spec.provider, []);
+			throw Object.assign(new Error(paused.error), paused);
+		}
 		if (!await bounded(deps.providerKeyPresent(spec.provider), caller)) {
 			const missing = providerKeyMissing(spec.provider, []);
 			throw Object.assign(new Error(missing.error), missing);

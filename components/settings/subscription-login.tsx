@@ -9,9 +9,10 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { type OAuthLoginView, type OAuthProviderRow } from "@/src/core";
+import { type LeftoverSignIn, type OAuthLoginView, type OAuthProviderRow } from "@/src/core";
 import { notifySettingsSaved } from "@/components/settings-signal";
 import { SettingsGroup } from "./controls.tsx";
+import { ProviderPauseSwitch, useRowPaused } from "./provider-pause.tsx";
 
 const POLL_MS = 1000;
 
@@ -34,6 +35,8 @@ function ProviderRow({ row, onChanged }: { row: OAuthProviderRow; onChanged: () 
 	const [login, setLogin] = useState<OAuthLoginView | null>(null);
 	const [code, setCode] = useState("");
 	const opened = useRef<string | null>(null);
+	const pauseIds = row.signedIn ? [row.id] : [];
+	const paused = useRowPaused(pauseIds);
 
 	const poll = useCallback(async (loginId: string) => {
 		const res = await fetch(`/api/auth/oauth/${loginId}`).catch(() => null);
@@ -103,10 +106,11 @@ function ProviderRow({ row, onChanged }: { row: OAuthProviderRow; onChanged: () 
 	return (
 		<div className="flex flex-col gap-1.5 px-1 py-1.5" data-testid={`subscription-${row.id}`}>
 			<div className="flex items-center justify-between gap-3">
-				<span className="font-ui text-xs text-foreground" title={row.planName}>
+				<span className={`font-ui text-xs text-foreground ${paused ? "opacity-50" : ""}`} title={row.planName}>
 					{row.label}
 				</span>
 				<span className="flex items-center gap-3 font-mono text-[11px] text-muted-foreground">
+					<ProviderPauseSwitch ids={pauseIds} label={row.label} />
 					{row.signedIn ? "Signed in" : "Not signed in"}
 					{row.signedIn ? (
 						<button type="button" onClick={() => void signOut()} className="hover:text-foreground" data-testid={`subscription-${row.id}-signout`}>
@@ -151,21 +155,94 @@ function ProviderRow({ row, onChanged }: { row: OAuthProviderRow; onChanged: () 
 	);
 }
 
+/** A stored sign-in the app no longer offers: pause it or remove it. Removal
+ *  confirms inline — it cannot be signed in again from the app. */
+function LeftoverRow({ entry, onChanged }: { entry: LeftoverSignIn; onChanged: () => void }) {
+	const [confirming, setConfirming] = useState(false);
+	const [busy, setBusy] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+	const paused = useRowPaused([entry.id]);
+
+	async function remove() {
+		setBusy(true);
+		setError(null);
+		const res = await fetch(`/api/auth/oauth/leftover/${encodeURIComponent(entry.id)}`, { method: "DELETE" }).catch(() => null);
+		setBusy(false);
+		if (!res?.ok) {
+			setError("Could not remove this sign-in. Try again.");
+			return;
+		}
+		setConfirming(false);
+		onChanged();
+		notifySettingsSaved("keys");
+	}
+
+	return (
+		<div className="flex flex-col gap-1.5 px-1 py-1.5" data-testid={`leftover-${entry.id}`}>
+			{confirming ? (
+				<div className="flex items-center justify-between gap-3 font-mono text-[11px] text-muted-foreground" data-testid={`leftover-${entry.id}-confirm`}>
+					<span>Remove this sign-in? It can&apos;t be signed in again here.</span>
+					<span className="flex shrink-0 items-center gap-3">
+						<button type="button" onClick={() => void remove()} disabled={busy} className="text-error hover:underline" data-testid={`leftover-${entry.id}-remove-confirm`}>
+							Remove
+						</button>
+						<button type="button" onClick={() => setConfirming(false)} disabled={busy} className="hover:text-foreground">
+							Cancel
+						</button>
+					</span>
+				</div>
+			) : (
+				<div className="flex items-center justify-between gap-3">
+					<span className={`font-ui text-xs text-foreground ${paused ? "opacity-50" : ""}`}>
+						{entry.label}
+						<span className="text-muted-foreground"> · old sign-in, no longer offered</span>
+					</span>
+					<span className="flex items-center gap-3 font-mono text-[11px] text-muted-foreground">
+						<ProviderPauseSwitch ids={[entry.id]} label={entry.label} />
+						<button type="button" onClick={() => setConfirming(true)} className="hover:text-foreground" data-testid={`leftover-${entry.id}-remove`}>
+							Remove
+						</button>
+					</span>
+				</div>
+			)}
+			{error && <p role="alert" className="text-[11px] text-error">{error}</p>}
+		</div>
+	);
+}
+
 export function SubscriptionLogin() {
 	const [rows, setRows] = useState<OAuthProviderRow[] | null>(null);
+	const [leftover, setLeftover] = useState<LeftoverSignIn[]>([]);
 	const reload = useCallback(() => {
 		void fetch("/api/auth/oauth")
 			.then((r) => r.json())
-			.then((body: { providers?: OAuthProviderRow[] }) => setRows(body.providers ?? []))
+			.then((body: { providers?: OAuthProviderRow[]; leftover?: LeftoverSignIn[] }) => {
+				setRows(body.providers ?? []);
+				setLeftover(body.leftover ?? []);
+			})
 			.catch(() => setRows([]));
 	}, []);
 	useEffect(reload, [reload]);
 
-	if (rows === null || rows.length === 0) return null;
+	return (
+		<>
+			{rows !== null && rows.length > 0 && <SignInGroup rows={rows} onChanged={reload} />}
+			{leftover.length > 0 && (
+				<SettingsGroup label="Leftover sign-ins" testid="group-leftover-sign-ins">
+					{leftover.map((entry) => (
+						<LeftoverRow key={entry.id} entry={entry} onChanged={reload} />
+					))}
+				</SettingsGroup>
+			)}
+		</>
+	);
+}
+
+function SignInGroup({ rows, onChanged }: { rows: OAuthProviderRow[]; onChanged: () => void }) {
 	return (
 		<SettingsGroup label="Subscription sign-in" testid="group-subscription-login">
 			{rows.map((row) => (
-				<ProviderRow key={row.id} row={row} onChanged={reload} />
+				<ProviderRow key={row.id} row={row} onChanged={onChanged} />
 			))}
 			<p className="px-1 pt-1 text-[11px] leading-relaxed text-muted-foreground/70">
 				Uses your own plan instead of an API key. Third-party use of a subscription may be against the provider&apos;s terms and could put the account at risk.

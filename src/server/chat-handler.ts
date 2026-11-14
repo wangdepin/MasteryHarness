@@ -38,7 +38,8 @@ import { preparePluginQuestionSubmission, reconcilePluginQuestionCompatibility, 
 import { searchAvailable, searchProvider } from "./search.ts";
 import { prepareSubmissionImages, prepareSubmissionImageChannels, prepareProblemSubmissionImageChannels, submissionImagePolicyKey } from "./submission-images.ts";
 import { preparePluginProblemSubmission, requirePluginProblemTarget, type ProblemTypeResolver } from "./plugin-problems.ts";
-import { providerKeyPresent } from "./keys.ts";
+import { providerKeyPresent, providerRefusal } from "./keys.ts";
+import { providerPaused } from "./provider-pause.ts";
 import { CLAUDE_CODE_PROVIDER } from "../core/contracts/claude-code.ts";
 import {
 	extractionEnabled,
@@ -46,7 +47,7 @@ import {
 	resolveConversationSpec,
 	resolveRoleSpec,
 } from "../core/settings-resolution.ts";
-import { modelsNotConfigured, providerKeyMissing as providerKeyMissingEnvelope, ROLE_SLOT, type ModelSlotName, type ProviderKeyMissing } from "../core/settings.ts";
+import { modelsNotConfigured, ROLE_SLOT, type ModelSlotName } from "../core/settings.ts";
 import { beginTurn, endTurn, isTurnRunning } from "./turn-liveness.ts";
 import { claimPreparingTurn, type TurnPreparation } from "./turn-preparation.ts";
 import { applyParkedDismissal } from "./dismissal-park.ts";
@@ -101,7 +102,7 @@ import type {CallUsage} from "../core/contracts.ts";
 /** Fresh check only at new background-run admission; never cancel a run
  * already in progress when the opt-in is switched off. */
 function connectionBackgroundAllowed(provider: string): boolean {
-	return subscriptionBackgroundAllowed(provider) && (provider !== CLAUDE_CODE_PROVIDER || providerKeyPresent(provider));
+	return !providerPaused(provider) && subscriptionBackgroundAllowed(provider) && (provider !== CLAUDE_CODE_PROVIDER || providerKeyPresent(provider));
 }
 
 function settlementErrorText(error: unknown): string {
@@ -122,8 +123,7 @@ const jobRunner = createJobRunner({
 	// reads the resolved engine's provider and asks THIS check (the agent
 	// layer may not read the key store); a missing key refuses the spawn
 	// with the 503-envelope family instead of dying mid-run.
-	providerKeyMissing: (provider, tier) =>
-		providerKeyPresent(provider) ? null : providerKeyMissingEnvelope(provider, [tier]),
+	providerKeyMissing: (provider, tier) => providerRefusal(provider, [tier]),
 	// Search port wave (2026-09-20): the researcher's web_search runs on the
 	// injected port — resolved FRESH per job (key rotations land immediately).
 	// null = honestly unavailable; the dispatch-level drop (below) uses the
@@ -144,8 +144,7 @@ export const extraction = createExtractionPipeline({
 	// Key-presence gate (provider-key interlude, 2026-09-25): same check
 	// the job runner gets — a stage engine whose provider key is gone
 	// refuses BEFORE any batch runs (the typed throw), never mid-run.
-	providerKeyMissing: (provider, tier) =>
-		providerKeyPresent(provider) ? null : providerKeyMissingEnvelope(provider, [tier]),
+	providerKeyMissing: (provider, tier) => providerRefusal(provider, [tier]),
 });
 
 
@@ -304,14 +303,15 @@ export async function handleChatInput(
 	// (a chat.model override still resolves through it).
 	if (isSubscriptionProvider(conversation.provider)) {
 		await refreshConnectionCatalog(conversation.provider);
-		if (input.type === "steers" && !connectionBackgroundAllowed(conversation.provider)) {
+		// A paused provider gets the paused refusal just below, not this one.
+		if (input.type === "steers" && !providerPaused(conversation.provider) && !connectionBackgroundAllowed(conversation.provider)) {
 			return Response.json({ error: "Background use is off for this connection. Automatic follow-up remains deferred in its queue." }, { status: 403 });
 		}
 	}
-	if (!providerKeyPresent(conversation.provider)) {
-		const envelope = providerKeyMissingEnvelope(conversation.provider, ["strong"]);
-		console.info(`[chat ${chatId}] turn refused — ${JSON.stringify(envelope)}`);
-		return Response.json(envelope, { status: 503 });
+	const refusal = providerRefusal(conversation.provider, ["strong"]);
+	if (refusal) {
+		console.info(`[chat ${chatId}] turn refused — ${JSON.stringify(refusal)}`);
+		return Response.json(refusal, { status: 503 });
 	}
 
 	// THE COMPACTION GATE (owner round 14, 2026-10-05 — the structural

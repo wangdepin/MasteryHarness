@@ -107,6 +107,8 @@ export * from "./coverage.ts";
 // export share it. Pure, browser-safe.
 export * from "./session-markdown.ts";
 export * from "./oauth-login.ts";
+// provider-pause.ts (2026-11-13): paused model sources — ids, labels, refusal text. Pure.
+export * from "./provider-pause.ts";
 // side-chat.ts (shared side conversations): ask-input validation,
 // thread lookup and the side model's lesson document. Pure, browser-safe.
 export * from "./side-chat.ts";

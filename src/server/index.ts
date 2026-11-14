@@ -58,6 +58,8 @@ export * from "./observability.ts";
 export { abortPluginWorkerActivity } from "./plugin-worker-activity.ts";
 export * from "./model-catalog.ts";
 export * from "./oauth-login.ts";
+export * from "./provider-pause.ts";
+export { providerPauseUpdate } from "./provider-pause-http.ts";
 export { subscriptionControlsResponse, subscriptionBrowserResponse } from "./web-subscription-http.ts";
 export { sessionCost } from "./pricing.ts";
 export { initializePlugins, getPluginHost, getPluginAgentContributions, getPluginQuestionTypeResolver, pluginTransport } from "./plugins.ts";

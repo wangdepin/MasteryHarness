@@ -72,4 +72,7 @@ export interface CatalogProvider {
 	/** Host credential/connection availability flag, not a remote health check.
 	 * Custom keyless connections can be available without an API key. */
 	keyPresent: boolean;
+	/** Switched off in Settings → Providers: credentials kept, models hidden
+	 * from this catalog, new requests refused. */
+	paused: boolean;
 }

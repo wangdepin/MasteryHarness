@@ -39,6 +39,7 @@ import { SubscriptionConnections } from "./subscription-connections.tsx";
 import { ClaudeCodeInstallationStatus } from "./claude-code-status.tsx";
 import { ProviderMenuList } from "./model-menu.tsx";
 import { SubscriptionLogin } from "./subscription-login.tsx";
+import { ProviderPauseSwitch, useRowPaused } from "./provider-pause.tsx";
 import { useInteractionLayer, useInteractionLayers, useOptionalInteractionLayers } from "@/components/interaction-layers";
 import { isInteractionScopeEligible } from "@/components/plugin-input-focus";
 import { MenuShell } from "@/components/menu-shell";
@@ -142,6 +143,11 @@ export function classifyKeys(
 	};
 }
 
+/** The provider ids one stored key serves (a row's pause switch covers all of them). */
+export function keyProviderIds(envVar: string, providers: readonly ProviderKeyInfo[] | undefined): string[] {
+	return (providers ?? []).filter((p) => p.envVar === envVar).map((p) => p.id);
+}
+
 /** A key row names its credential, not whichever provider sorts first.
  * Pi exposes Zen and Go separately but both read OPENCODE_API_KEY. */
 export function providerKeyLabel(id: string, providers: readonly ProviderKeyInfo[] | undefined): string | undefined {
@@ -172,6 +178,7 @@ function KeyTableRow({
 	onDelete,
 	onCancel,
 	testid,
+	pauseIds,
 }: {
 	label: string;
 	/** The "Get a key ↗" target — curated keys carry one. */
@@ -185,8 +192,11 @@ function KeyTableRow({
 	 *  must be visible — Cancel beside Save/Delete, not only Esc). */
 	onCancel: () => void;
 	testid: string;
+	/** The provider ids this key serves; given, the row gets a pause switch. */
+	pauseIds?: readonly string[];
 }) {
 	const envOwned = status.source === "env";
+	const paused = useRowPaused(pauseIds ?? []);
 	const [value, setValue] = useState("");
 	const [error, setError] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
@@ -265,16 +275,17 @@ function KeyTableRow({
 
 	return (
 		<div data-testid={testid} className={envOwned ? "opacity-40" : undefined}>
+			<div className="flex items-center gap-2">
 			<button
 				type="button"
 				aria-expanded={expanded}
 				data-testid={`${testid}-row`}
 				onClick={() => !envOwned && onToggle()}
-				className={`flex w-full items-center justify-between gap-3 rounded-sm px-1 py-1.5 text-left ${
+				className={`flex min-w-0 flex-1 items-center justify-between gap-3 rounded-sm px-1 py-1.5 text-left ${
 					envOwned ? "cursor-default" : "cursor-pointer transition-colors hover:bg-accent/50"
 				}`}
 			>
-				<span className="font-ui text-xs text-foreground">{label}</span>
+				<span className={`font-ui text-xs text-foreground ${paused ? "opacity-50" : ""}`}>{label}</span>
 				<span className="flex items-center gap-2">
 					{docsUrl && (
 						<a
@@ -292,6 +303,8 @@ function KeyTableRow({
 					</span>
 				</span>
 			</button>
+			{pauseIds && <ProviderPauseSwitch ids={pauseIds} label={label} />}
+			</div>
 			{error && (
 				<p role="alert" data-testid={`${testid}-error`} className="pl-6 text-xs text-error">
 					{error}
@@ -503,6 +516,7 @@ export function KeysSection({
 						onCancel={() => setOpenRow(null)}
 						onDelete={() => deleteKey(status.id)}
 						testid={`key-${status.id.toLowerCase()}`}
+						pauseIds={keyProviderIds(status.id, providers)}
 					/>
 				))}
 				{custom?.baseUrl && (
@@ -708,23 +722,27 @@ function CustomEndpointRow({
 }) {
 	const count = status.models.length;
 	const line = `${status.baseUrl} · ${count} model${count === 1 ? "" : "s"} · ${status.authMode === "keyless" ? "keyless" : status.keyPresent ? "API key" : "API key missing"}`;
+	const paused = useRowPaused(CUSTOM_PAUSE_IDS);
 	return (
-		<div data-testid="custom-endpoint-row">
+		<div data-testid="custom-endpoint-row" className="flex items-center gap-2">
 			<button
 				type="button"
 				data-testid="custom-endpoint-row-btn"
 				aria-expanded={expanded}
 				onClick={onToggle}
-				className="flex w-full items-center justify-between gap-3 rounded-sm px-1 py-1.5 text-left cursor-pointer transition-colors hover:bg-accent/50"
+				className="flex min-w-0 flex-1 items-center justify-between gap-3 rounded-sm px-1 py-1.5 text-left cursor-pointer transition-colors hover:bg-accent/50"
 			>
-				<span className="font-ui text-xs text-foreground">Custom endpoint</span>
+				<span className={`font-ui text-xs text-foreground ${paused ? "opacity-50" : ""}`}>Custom endpoint</span>
 				<span data-testid="custom-endpoint-status" className="max-w-[60%] truncate font-mono text-[11px] text-muted-foreground">
 					{line}
 				</span>
 			</button>
+			<ProviderPauseSwitch ids={CUSTOM_PAUSE_IDS} label="Custom endpoint" />
 		</div>
 	);
 }
+
+const CUSTOM_PAUSE_IDS = [CUSTOM_PROVIDER.id] as const;
 
 /** A pin row's raw input state — "" means "no pin": the endpoint's own value,
  *  then the compiled default, decides. `reasoning` is tri-state. */

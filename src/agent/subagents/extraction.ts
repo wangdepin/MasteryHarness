@@ -825,7 +825,7 @@ export function createExtractionPipeline(deps: ExtractionPipelineDeps): Extracti
 			const refusal = deps.providerKeyMissing?.(engine!.model.provider, ROLE_SLOT[role]);
 			if (refusal) {
 				console.info(`[extraction] refused — ${JSON.stringify(refusal)}`);
-				throw new ProviderKeyMissingError(refusal.provider, refusal.slots);
+				throw new ProviderKeyMissingError(refusal);
 			}
 		}
 	}

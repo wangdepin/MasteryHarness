@@ -92,7 +92,8 @@ export function ZeroKeysPill({ onOpen, inline = false }: { onOpen: () => void; i
 	return inline ? button : <div className="pointer-events-auto mb-2 flex justify-center">{button}</div>;
 }
 /** Pure: the strong slot is pinned to a provider whose key is GONE (owner
- *  interlude, 2026-09-25 — the original deleted-key scenario). The catalog
+ *  interlude, 2026-09-25 — the original deleted-key scenario) or that is
+ *  paused in Settings → Providers (2026-11-13). The catalog
  *  already knows both halves: slots.strong is the resolved pin, providers[]
  *  lists only PRESENT-key providers (keyless ones are absent, the same
  *  discipline as the search engines). False when the strong slot is unset
@@ -102,7 +103,7 @@ export function ZeroKeysPill({ onOpen, inline = false }: { onOpen: () => void; i
 export function strongKeyless(catalog: ModelCatalogResponse | undefined): boolean {
 	const strong = catalog?.slots.strong;
 	if (!strong) return false;
-	return !catalog.providers.some((p) => p.id === strong.model.provider && p.keyPresent);
+	return !catalog.providers.some((p) => p.id === strong.model.provider && p.keyPresent && !p.paused);
 }
 
 /** The strong-slot keyless truth for the PRE-SEND guard (home / /chat/new):

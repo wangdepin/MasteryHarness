@@ -38,7 +38,7 @@ function catalog(connected = true): ModelCatalogResponse {
 		models: connected ? [a, b] : [], defaults: null,
 		rolePins: { researcher: null, demoBuilder: null, visualMaker: null, extractor: null, auditor: null, sideQuestion: null },
 		slots: { strong: { model: { provider: a.provider, id: a.id }, thinkingLevel: "low" }, cheap: { model: { provider: a.provider, id: a.id }, thinkingLevel: "high" }, vision: { model: { provider: a.provider, id: a.id }, thinkingLevel: "low" } },
-		providers: [{ ...provider, keyPresent: connected }],
+		providers: [{ ...provider, keyPresent: connected, paused: false }],
 	};
 }
 function Reader() { snapshot = useModelCatalog(); return null; }
@@ -123,7 +123,7 @@ test("zero providers always means exclusive connection stage; reconnect with all
 	assert.equal(document.querySelector('[data-testid="setup-add-provider"]'), null);
 	assert.equal(document.querySelector('[data-testid="setup-save"]'), null);
 	await act(async () => notifySettingsSaved("keys"));
-	const other = catalog(false); other.providers = [{ id: "other", envVar: "OTHER_KEY", keyPresent: true }];
+	const other = catalog(false); other.providers = [{ id: "other", envVar: "OTHER_KEY", keyPresent: true, paused: false }];
 	await answer(3, other);
 	assert.equal(closed, 1); assert.equal(completed, 0); assert.deepEqual(writes, []);
 	assert.equal(document.querySelector('[data-testid="setup-dialog"]'), null, "no intermediate picker frame after reconnect");
@@ -162,7 +162,7 @@ for (const count of [0, 1, 2]) test(`connecting with ${count} saved slots only r
 	await warm(before);
 	let closed = 0; await render(<><Reader />{setup(() => { closed++; })}</>); await answer(1, before);
 	assert.ok(element("setup-stage-keys"));
-	const connected = { ...before, models: [{ ...b, provider: "other" }], providers: [{ id: "other", envVar: "OTHER_KEY", keyPresent: true }] };
+	const connected = { ...before, models: [{ ...b, provider: "other" }], providers: [{ id: "other", envVar: "OTHER_KEY", keyPresent: true, paused: false }] };
 	await act(async () => notifySettingsSaved("keys")); await answer(2, connected);
 	assert.ok(element("setup-stage-pickers")); assert.equal(document.querySelector('[data-testid="setup-stage-keys"]'), null); assert.equal(closed, 0);
 	for (const slot of ["strong", "cheap", "vision"] as const) {
@@ -219,7 +219,7 @@ test("saved completeness follows ordinary repairs and survives temporary connect
 
 test("blocked session recovery opens its ordinary picker, never changes Strong or substitutes a model", async () => {
 	installFetch(); const available = { ...b, provider: "other" }; const body = catalog();
-	body.models = [available]; body.providers = [{ id: "other", envVar: "OTHER_KEY", keyPresent: true }];
+	body.models = [available]; body.providers = [{ id: "other", envVar: "OTHER_KEY", keyPresent: true, paused: false }];
 	body.slots.strong = { model: { provider: "other", id: b.id }, thinkingLevel: "medium" };
 	const globals: ModelsSettings = { strong: body.slots.strong };
 	const session = { model: { provider: a.provider, id: a.id }, thinkingLevel: "xhigh" };
@@ -245,7 +245,7 @@ test("blocked session recovery opens its ordinary picker, never changes Strong o
 
 for (const result of ["override", "legacy", "http-failure", "network-failure"] as const) test(`known catalog never enforces provisional Strong on a pending session; session read ${result}`, async () => {
 	installFetch(); const available = { ...b, provider: "other" }; const body = catalog();
-	body.models = [available]; body.providers = [{ id: "other", envVar: "OTHER_KEY", keyPresent: true }];
+	body.models = [available]; body.providers = [{ id: "other", envVar: "OTHER_KEY", keyPresent: true, paused: false }];
 	// Global Strong is unavailable, but this existing session owns a valid
 	// model. Resolve global settings first while keeping its record pending.
 	const globals: ModelsSettings = { strong: { model: { provider: a.provider, id: a.id }, thinkingLevel: "xhigh" } };
@@ -282,7 +282,7 @@ test("availability and setup completeness never conflate missing metadata, disco
 	assert.equal(selectedModelUnavailable(body, `${a.provider}:${a.id}`), true);
 	assert.equal(selectedModelUnavailable(undefined, `${a.provider}:${a.id}`), false);
 	assert.equal(selectedModelUnavailable(body, undefined), false);
-	body.models = [b]; body.providers = [{ ...provider, keyPresent: true }];
+	body.models = [b]; body.providers = [{ ...provider, keyPresent: true, paused: false }];
 	assert.equal(selectedModelUnavailable(body, `${b.provider}:${b.id}`), false);
 	body.slots.cheap = null; assert.equal(savedSlotsConfigured(body.slots), false);
 });

@@ -74,6 +74,7 @@ export interface CatalogProvider {
     id: string;
     envVar: string;
     keyPresent: boolean;
+    paused: boolean;
 }
 ```
 
@@ -82,6 +83,7 @@ export interface CatalogProvider {
 - [id](#catalogprovider-id)
 - [envVar](#catalogprovider-envvar)
 - [keyPresent](#catalogprovider-keypresent)
+- [paused](#catalogprovider-paused)
 
 ### CatalogProvider id
 
@@ -104,6 +106,15 @@ Custom keyless connections can be available without an API key.
 
 ```ts
 keyPresent: boolean;
+```
+
+### CatalogProvider paused
+
+Switched off in Settings → Providers: credentials kept, models hidden
+from this catalog, new requests refused.
+
+```ts
+paused: boolean;
 ```
 
 ## ModelCatalogEntry

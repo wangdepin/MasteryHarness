@@ -37,7 +37,7 @@ const again = { name: "again", label: "again", description: "Continue", paramete
 function nativeCatalogFor(model: { provider: string; id: string }): ModelCatalogResponse {
 	return {
 		models: [{ ...model, name: "Fixture", reasoning: true, input: ["text"], supportedLevels: ["off", "high"], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, contextWindow: 8192, maxTokens: 1024 }],
-		providers: [{ id: model.provider, envVar: "FIXTURE_KEY", keyPresent: true }],
+		providers: [{ id: model.provider, envVar: "FIXTURE_KEY", keyPresent: true, paused: false }],
 		defaults: { model },
 		rolePins: { researcher: null, demoBuilder: null, visualMaker: null, extractor: null, auditor: null, sideQuestion: null },
 		slots: { strong: null, cheap: null, vision: null },

@@ -36,9 +36,16 @@ function connectionModel(provider: string, id: string): Model<Api> | undefined {
 	return provider === "chatgpt" ? chatGPTModel(id) : nativeSubscriptionId(provider) ? nativeSubscriptionModel(provider, id) : piModels().getModel(provider, id);
 }
 function connectionProviderIds(): string[] { return [...piModels().getProviders().map((p) => p.id), "chatgpt", ...NATIVE_SUBSCRIPTIONS.map((p) => p.logicalId)]; }
+/** Every provider id a switch in Settings → Providers may pause: each known
+ *  model source (the custom endpoint even while unconfigured), never Claude Code. */
+export function pausableProviderIds(): string[] {
+	return [...new Set([...connectionProviderIds(), CUSTOM_PROVIDER.id])].filter(isPausableProvider);
+}
 import { settingsStore } from "../store/settings.ts";
 import { effectiveSettings } from "./stores.ts";
 import { hasOAuthCredential } from "../store/oauth-credentials.ts";
+import { pausedProviders, providerPaused } from "./provider-pause.ts";
+import { isPausableProvider, providerPausedMessage } from "../core/provider-pause.ts";
 import { keyValue } from "./keys.ts";
 import type { ChatSettings } from "../core/contracts/chat.ts";
 import type {
@@ -150,6 +157,7 @@ export function catalogSlots(): SlotPins {
  *  saving a key immediately federates the provider into the picker. */
 export function catalogProviders(): CatalogProvider[] {
 	piModels();
+	const paused = pausedProviders();
 	const keyed = AUTH_PROVIDER_KEYS.map((p) => ({
 		id: p.id,
 		envVar: p.envVar,
@@ -162,7 +170,7 @@ export function catalogProviders(): CatalogProvider[] {
 		envVar: "",
 		keyPresent: hasOAuthCredential(s.id),
 	}));
-	return [
+	const rows = [
 		...keyed,
 		...signInOnly,
 		{ id: "chatgpt", envVar: "", keyPresent: chatGPTConnected() },
@@ -173,14 +181,21 @@ export function catalogProviders(): CatalogProvider[] {
 		...(customProviderUsable(effectiveSettings().customProvider)
 			? [{ id: CUSTOM_PROVIDER.id, envVar: CUSTOM_PROVIDER.envVar, keyPresent: customProviderAvailable() }]
 			: []),
-	].sort((a, b) => a.id.localeCompare(b.id));
+	];
+	return rows.map((row) => ({ ...row, paused: paused.has(row.id) })).sort((a, b) => a.id.localeCompare(b.id));
 }
 
-/** The providers whose key is present — the picker federates exactly
- *  these (a keyless provider's models are unreachable by design; the
- *  Keys page is the discovery surface, same discipline as search). */
-function keyedProviderIds(): Set<string> {
-	return new Set(catalogProviders().filter((p) => p.keyPresent).map((p) => p.id));
+/** The providers whose key is present and that are not paused — the picker
+ *  federates exactly these (a keyless provider's models are unreachable by
+ *  design; the Keys page is the discovery surface, same discipline as search). */
+function usableProviderIds(): Set<string> {
+	return new Set(catalogProviders().filter((p) => p.keyPresent && !p.paused).map((p) => p.id));
+}
+
+/** Subscription-connection models (ChatGPT, native subscriptions) minus paused providers'. */
+function connectionModels(): Model<Api>[] {
+	const paused = pausedProviders();
+	return [...chatGPTModels(), ...nativeSubscriptionModels()].filter((m) => !paused.has(m.provider));
 }
 
 /** Project one catalog model to the client DTO. */
@@ -212,15 +227,15 @@ export function toModelDto(model: Model<Api>): ModelDto {
  *  server-side through this. No hardcoded fallback exists anywhere:
  *  a model missing here reads limit-null (usage-only, honest render). */
 export function catalogContextLimits(): Map<string, number> {
-	const keyed = keyedProviderIds();
+	const usable = usableProviderIds();
 	const index = new Map<string, number>();
 	for (const provider of piModels().getProviders()) {
-		if (!keyed.has(provider.id) || provider.id === CLAUDE_CODE_PROVIDER) continue;
+		if (!usable.has(provider.id) || provider.id === CLAUDE_CODE_PROVIDER) continue;
 		for (const model of piModels().getModels(provider.id)) {
 			index.set(`${provider.id}:${model.id}`, model.contextWindow);
 		}
 	}
-	for (const model of [...chatGPTModels(), ...nativeSubscriptionModels()]) index.set(`${model.provider}:${model.id}`, model.contextWindow);
+	for (const model of connectionModels()) index.set(`${model.provider}:${model.id}`, model.contextWindow);
 	return index;
 }
 
@@ -229,14 +244,14 @@ export function catalogContextLimits(): Map<string, number> {
  *  defaults a settings-less chat runs + the background roles' resolved
  *  pins (the settings UI's per-role default captions). */
 export function modelCatalog(): ModelCatalogResponse {
-	const keyed = keyedProviderIds();
+	const usable = usableProviderIds();
 	const models = piModels()
 		.getProviders()
-		.filter((p) => keyed.has(p.id))
+		.filter((p) => usable.has(p.id))
 		.flatMap((p) => piModels().getModels(p.id))
 		.map(toModelDto)
 		.sort((a, b) => (a.provider === b.provider ? a.id.localeCompare(b.id) : a.provider.localeCompare(b.provider)))
-		.concat([...chatGPTModels(), ...nativeSubscriptionModels()].map(toModelDto));
+		.concat(connectionModels().map(toModelDto));
 	return {
 		models,
 		defaults: catalogDefaults(),
@@ -264,6 +279,7 @@ export function validateChatSettings(settings: ChatSettings): SettingsValidation
 		if (!providers.includes(provider)) {
 			return { ok: false, error: `Unknown provider "${provider}" — configured: ${providers.join(", ")}` };
 		}
+		if (providerPaused(provider)) return { ok: false, error: providerPausedMessage(provider) };
 		if (!connectionModel(provider, id)) {
 			return { ok: false, error: `No model "${id}" in the ${provider} catalog` };
 		}
@@ -301,6 +317,7 @@ function validateSlotSpec(name: ModelSlotName, slot: { model?: { provider: strin
 		if (!providers.includes(provider)) {
 			return { ok: false, error: `Unknown provider "${provider}" — configured: ${providers.join(", ")}` };
 		}
+		if (providerPaused(provider)) return { ok: false, error: providerPausedMessage(provider) };
 		if (!connectionModel(provider, id)) {
 			return { ok: false, error: `No model "${id}" in the ${provider} catalog` };
 		}

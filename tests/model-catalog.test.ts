@@ -390,7 +390,7 @@ describe("the claude-code provider (native CLI authentication, no LearnHarness k
 	it("catalogProviders() marks claude-code present when the CLI is installed", () => {
 		withClaudeInstalled(true, () => {
 			const row = catalogProviders().find((p) => p.id === "claude-code");
-			assert.deepEqual(row, { id: "claude-code", envVar: "", keyPresent: true });
+			assert.deepEqual(row, { id: "claude-code", envVar: "", keyPresent: true, paused: false });
 		});
 	});
 

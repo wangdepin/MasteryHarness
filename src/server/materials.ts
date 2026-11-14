@@ -16,6 +16,8 @@ import { EPUB_MAX_TEXT_BYTES, EpubError, epubToMarkdown } from "../agent/subagen
 import { fetchAndExtract } from "../agent/tools/web.ts";
 import { materialTools } from "../agent/tools/materials.ts";
 import { stores } from "./stores.ts";
+import { providerPaused } from "./provider-pause.ts";
+import { providerPausedMessage } from "../core/provider-pause.ts";
 
 /**
  * Lesson source material — the service seam (fork addition, 2026-10-24;
@@ -64,6 +66,10 @@ function startProfile(chatId: string, material: LessonMaterial): Promise<void> {
 				status: "error",
 				error: "no vision model is configured (Settings → Agent: the vision slot reads source material)",
 			});
+			return;
+		}
+		if (providerPaused(spec.provider)) {
+			materialStore.update(chatId, material.id, { status: "error", error: providerPausedMessage(spec.provider) });
 			return;
 		}
 		try {

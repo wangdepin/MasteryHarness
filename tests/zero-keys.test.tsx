@@ -140,7 +140,7 @@ const catalog = (strongProvider: string | null, ...keyedProviders: string[]): Mo
 		cheap: null,
 		vision: null,
 	},
-	providers: keyedProviders.map((id) => ({ id, envVar: `${id.toUpperCase()}_API_KEY`, keyPresent: true })),
+	providers: keyedProviders.map((id) => ({ id, envVar: `${id.toUpperCase()}_API_KEY`, keyPresent: true, paused: false })),
 });
 
 describe("strongKeyless — the pre-send guard's truth (owner interlude, no-orphan-chats)", () => {

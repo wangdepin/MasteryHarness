@@ -58,6 +58,8 @@ import { isOAuthSignInProvider } from "../core/oauth-login.ts";
 import { isSubscriptionProvider, subscriptionConnected } from "../agent/subscription-connections.ts";
 import { customProviderAvailable, installCustomProviderSource } from "./custom-provider.ts";
 import { claudeCodeAvailable } from "./claude-code-config.ts";
+import { providerPaused } from "./provider-pause.ts";
+import { providerKeyMissing, providerPausedRefusal, type ModelSlotName, type ProviderKeyMissing } from "../core/settings.ts";
 import { CLAUDE_CODE_PROVIDER } from "../agent/claude-code/constants.ts";
 import { CUSTOM_AUTH_BINDING } from "../core/custom-provider-auth.ts";
 
@@ -208,6 +210,15 @@ export function providerKeyPresent(provider: string): boolean {
 	if (info) return keyValue(info.envVar) !== undefined || hasOAuthCredential(provider);
 	// Sign-in-only providers (Antigravity): present exactly when signed in.
 	return isOAuthSignInProvider(provider) ? hasOAuthCredential(provider) : true;
+}
+
+/** Why a NEW model run on this provider must be refused, as the 503
+ *  envelope, or null when it may run. A paused provider (Settings →
+ *  Providers) is refused before its key is even consulted. Fresh per call;
+ *  runs already in progress are never cancelled by it. */
+export function providerRefusal(provider: string, slots: ModelSlotName[]): ProviderKeyMissing | null {
+	if (providerPaused(provider)) return providerPausedRefusal(provider, slots);
+	return providerKeyPresent(provider) ? null : providerKeyMissing(provider, slots);
 }
 
 /**
