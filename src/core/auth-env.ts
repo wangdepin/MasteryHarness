@@ -1,3 +1,5 @@
+import { withoutAccessToken } from "./access-env.ts";
+
 /** Shared provenance only: no credential-store reads in the agent layer. */
 interface AuthBoot {
 	/** Names owned by the original launch environment. */
@@ -13,9 +15,9 @@ export function authEnvRecord(): AuthBoot {
 	return g[BOOT_KEY];
 }
 
-/** External CLIs own their authentication. Never pass LearnHarness-only injections. */
+/** External CLIs own their authentication. Never pass LearnHarness-only injections, nor the app's access token. */
 export function externalCliEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
-	const result = { ...env };
+	const result = withoutAccessToken(env);
 	const { realEnv, fillGap } = authEnvRecord();
 	for (const name of fillGap) {
 		if (!realEnv.has(name)) delete result[name];

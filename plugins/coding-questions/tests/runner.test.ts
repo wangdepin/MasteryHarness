@@ -145,6 +145,22 @@ test("passes argv literally with no shell expansion and inherits environment", a
   assert.equal(actual.home, process.env.HOME);
 });
 
+test("learner code never sees the app's access token", async (t) => {
+  const f = await fixture(t);
+  const saved = process.env.LH_ACCESS_TOKEN;
+  process.env.LH_ACCESS_TOKEN = "ab".repeat(32);
+  try {
+    const source = `console.log(JSON.stringify({token: process.env.LH_ACCESS_TOKEN ?? null, path: process.env.PATH}))`;
+    const result = await runTests({ ...f, tests: nodeTests(source, []) });
+    assert.equal(result.status, "passed");
+    assert.deepEqual(JSON.parse(result.stdout), { token: null, path: process.env.PATH });
+    assert.equal(process.env.LH_ACCESS_TOKEN, "ab".repeat(32), "the server's own environment is untouched");
+  } finally {
+    if (saved === undefined) delete process.env.LH_ACCESS_TOKEN;
+    else process.env.LH_ACCESS_TOKEN = saved;
+  }
+});
+
 test("uses normal PATH lookup instead of requiring an absolute program", async (t) => {
   const f = await fixture(t);
   const result = await runTests({ ...f, tests: { program: path.basename(process.execPath), args: ["-e", "process.stdout.write('found')"], code: "" } });

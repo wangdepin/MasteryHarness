@@ -79,6 +79,12 @@ describe("boot fill-gap + precedence", () => {
 		assert.equal(externalCliEnv().OPENROUTER_API_KEY, ENV_OWNED, "external CLIs retain launch-env ownership");
 	});
 
+	it("external CLIs never inherit the app's access token, even from the launch env", () => {
+		const env = externalCliEnv({ ...process.env, LH_ACCESS_TOKEN: "ab".repeat(32), PATH: "/usr/bin" });
+		assert.equal("LH_ACCESS_TOKEN" in env, false);
+		assert.equal(env.PATH, "/usr/bin");
+	});
+
 	it("unknown file var: fill-gapped into env, surfaced as a generic row", () => {
 		assert.equal(process.env.FUTURE_PLANS_TOKEN, "opaque-plans-token", "reflected at boot");
 		assert.equal(externalCliEnv().FUTURE_PLANS_TOKEN, undefined, "external CLIs exclude unknown file-only injections too");

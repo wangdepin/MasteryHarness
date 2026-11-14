@@ -33,6 +33,12 @@ describe("browser-service helper (pure halves)", () => {
 		assert.equal(env.PATH, "/usr/bin");
 	});
 
+	it("spawn env drops the app's access token — the helper renders model-written pages", () => {
+		const env = browserServiceSpawnEnv({ LH_ACCESS_TOKEN: "ab".repeat(32), PATH: "/usr/bin" });
+		assert.equal("LH_ACCESS_TOKEN" in env, false);
+		assert.equal(env.PATH, "/usr/bin");
+	});
+
 	it("spawn env never mutates the caller's env object", () => {
 		const original = { ELECTRON_RUN_AS_NODE: "1", KEEP: "yes" };
 		browserServiceSpawnEnv(original);

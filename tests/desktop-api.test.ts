@@ -54,7 +54,7 @@ test("all methods fail closed for desktop missing/wrong secret; the matcher cove
 	assert(desktopAPIAuthorized(new Headers({ [HEADER]: secret }), { LH_DESKTOP_SERVER: "1", LH_DESKTOP_API_SECRET: secret }));
 	for (const pathname of ["/api/events", "/api/chat", "/api/settings/models", "/api/chats/scratch/markdown"]) assert(unstable_doesProxyMatch({ config, nextConfig: {}, url: origin + pathname }));
 	assert(unstable_doesProxyMatch({ config, nextConfig: {}, url: origin + "/chat/new" }), "token mode gates pages too");
-	for (const pathname of ["/_next/static/chunks/a.js", "/_next/image", "/favicon.ico"]) assert(!unstable_doesProxyMatch({ config, nextConfig: {}, url: origin + pathname }), pathname);
+	for (const pathname of ["/_next/static/chunks/a.js", "/favicon.ico"]) assert(!unstable_doesProxyMatch({ config, nextConfig: {}, url: origin + pathname }), pathname);
 	const originalMarker = process.env.LH_DESKTOP_SERVER;
 	const originalSecret = process.env.LH_DESKTOP_API_SECRET;
 	try {

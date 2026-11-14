@@ -5,6 +5,7 @@
  */
 
 export { healthBody } from "./health.ts";
+export { pairingResponse } from "./access-pairing.ts";
 export * from "./chat-handler.ts";
 export * from "./events-stream.ts";
 export * from "./chats.ts";

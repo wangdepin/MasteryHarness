@@ -41,6 +41,13 @@ function capture() {
   };
 }
 
+/** Learner code inherits the server's environment, minus the token that opens the app itself. */
+export function learnerProcessEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const result = { ...env };
+  delete result.LH_ACCESS_TOKEN;
+  return result;
+}
+
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -63,6 +70,7 @@ async function observeProcess(
   try {
     child = spawn(tests.program, tests.args, {
       cwd,
+      env: learnerProcessEnv(process.env),
       shell: false,
       // A separate POSIX process group lets us kill descendants even when the
       // driver exits first and its descendants still hold our output pipes.

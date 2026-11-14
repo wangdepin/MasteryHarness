@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { it } from "node:test";
 import { NextRequest } from "next/server";
 import { proxy } from "../proxy.ts";
+import { ACCESS_COOKIE, mintAccessCookie } from "../src/server/access-cookie.ts";
 import { createPluginDocumentRoute } from "../src/server/plugin-transport.ts";
 
 it("streamed document route shares browser policy before params, plugin work or multipart body access", async t => {
@@ -54,7 +55,8 @@ it("token mode (LH_ACCESS_TOKEN): the streamed route, exempt from Proxy, still n
 	const keys = ["LH_DESKTOP_SERVER", "LH_DESKTOP_API_SECRET", "LH_ALLOWED_HOSTS", "LH_ACCESS_TOKEN"] as const;
 	const saved = keys.map(key => process.env[key]);
 	for (const key of keys) delete process.env[key];
-	const token = "t".repeat(40);
+	const token = "ab".repeat(32);
+	const cookie = `${ACCESS_COOKIE}=${mintAccessCookie(token, Date.now())}`;
 	process.env.LH_ACCESS_TOKEN = token;
 	try {
 		const convert = t.mock.fn(async () => Response.json({ markdown: "owned fixture" }));
@@ -67,15 +69,15 @@ it("token mode (LH_ACCESS_TOKEN): the streamed route, exempt from Proxy, still n
 		const unpaired = await route.POST(new Request(url, { method: "POST", headers: headers(), body: form() }), context);
 		assert.equal(unpaired.status, 403, "no cookie: refused before the plugin runs");
 		assert.match(((await unpaired.json()) as { error: string }).error, /not paired/);
-		const wrong = await route.POST(new Request(url, { method: "POST", headers: headers("lh_token=wrong"), body: form() }), context);
+		const wrong = await route.POST(new Request(url, { method: "POST", headers: headers(`${ACCESS_COOKIE}=wrong`), body: form() }), context);
 		assert.equal(wrong.status, 403, "a wrong cookie is refused too");
 		assert.equal(convert.mock.callCount(), 0);
 
-		const paired = await route.POST(new Request(url, { method: "POST", headers: headers(`lh_token=${token}`), body: form() }), context);
+		const paired = await route.POST(new Request(url, { method: "POST", headers: headers(cookie), body: form() }), context);
 		assert.equal(paired.status, 200, "the paired browser reaches the conversion");
 		assert.equal(convert.mock.callCount(), 1);
 
-		const otherHost = await route.POST(new Request(url, { method: "POST", headers: { ...headers(`lh_token=${token}`), host: "192.168.1.5:3000" }, body: form() }), context);
+		const otherHost = await route.POST(new Request(url, { method: "POST", headers: { ...headers(cookie), host: "192.168.1.5:3000" }, body: form() }), context);
 		assert.equal(otherHost.status, 403, "token mode keeps its stricter Host rule (loopback + LH_ALLOWED_HOSTS) on this route too");
 	} finally {
 		keys.forEach((key, index) => { if (saved[index] === undefined) delete process.env[key]; else process.env[key] = saved[index]; });

@@ -1,89 +1,139 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { NextRequest } from "next/server";
-import { ACCESS_COOKIE, accessDecision, hostAllowed, tokenModeOn, type AccessRequest } from "../src/server/access-gate.ts";
+import { ACCESS_COOKIE, mintAccessCookie } from "../src/server/access-cookie.ts";
+import { accessDecision, type AccessRequest } from "../src/server/access-gate.ts";
+import { expectedOrigins, hostAllowed } from "../src/server/access-host.ts";
+import { PAIR_PATH } from "../src/server/access-pairing-page.ts";
+import { gateMode } from "../src/server/access-token.ts";
 import { healthBody } from "../src/server/health.ts";
 import { proxy } from "../proxy.ts";
 
-const TOKEN = "t".repeat(40);
+const TOKEN = "ab".repeat(32);
 const ENV = { LH_ACCESS_TOKEN: TOKEN };
-const HOST = "127.0.0.1:3000";
+const HOST = "127.0.0.1:4747";
+const ORIGIN = `http://${HOST}`;
+const NOW = Date.UTC(2026, 10, 15);
+const NO_METADATA = { site: null, mode: null, dest: null };
+const paired = `${ACCESS_COOKIE}=${mintAccessCookie(TOKEN, NOW)}`;
 
 function req(over: Partial<AccessRequest> = {}): AccessRequest {
-	return { method: "GET", pathname: "/", search: "", host: HOST, origin: null, cookieHeader: null, ...over };
+	return { method: "GET", pathname: "/", search: "", host: HOST, origin: null, cookieHeader: null, fetchMetadata: NO_METADATA, ...over };
 }
-const paired = `${ACCESS_COOKIE}=${TOKEN}`;
+const decide = (over: Partial<AccessRequest> = {}, env: Record<string, string | undefined> = ENV) => accessDecision(req(over), env, NOW);
 
-test("token mode is on only with LH_ACCESS_TOKEN, and never under the desktop shell", () => {
-	assert.equal(tokenModeOn({}), false);
-	assert.equal(tokenModeOn({ LH_ACCESS_TOKEN: "" }), false);
-	assert.equal(tokenModeOn(ENV), true);
-	assert.equal(tokenModeOn({ ...ENV, LH_DESKTOP_SERVER: "1" }), false);
-	assert.deepEqual(accessDecision(req({ host: "evil.example" }), {}), { kind: "allow" }, "off: nothing is checked");
+test("mode: off without a token or under the desktop shell, misconfigured unless the token is 64 hex", () => {
+	assert.equal(gateMode({}), "off");
+	assert.equal(gateMode({ LH_ACCESS_TOKEN: "" }), "off");
+	assert.equal(gateMode(ENV), "on");
+	assert.equal(gateMode({ LH_ACCESS_TOKEN: TOKEN.toUpperCase() }), "on");
+	assert.equal(gateMode({ ...ENV, LH_DESKTOP_SERVER: "1" }), "off");
+	for (const bad of ["short", "t".repeat(40), "g".repeat(64), `${TOKEN}0`]) assert.equal(gateMode({ LH_ACCESS_TOKEN: bad }), "misconfigured", bad);
+});
+
+test("off: nothing is checked", () => {
+	assert.deepEqual(decide({ host: "evil.example", method: "POST", pathname: "/api/chat" }, {}), { kind: "allow" });
+});
+
+test("misconfigured: everything is 503 except health", () => {
+	const env = { LH_ACCESS_TOKEN: "short" };
+	for (const pathname of ["/", "/chat/abc", "/api/chats"]) {
+		const decision = decide({ pathname, cookieHeader: paired }, env);
+		assert(decision.kind === "deny" && decision.status === 503, pathname);
+	}
+	assert.deepEqual(decide({ pathname: "/api/health" }, env), { kind: "allow" });
 });
 
 test("hosts: loopback names with any port, plus LH_ALLOWED_HOSTS", () => {
 	for (const host of ["127.0.0.1", "127.0.0.1:3000", "localhost:8", "LOCALHOST", "[::1]:3000", "[::1]"]) assert(hostAllowed(host, {}), host);
 	for (const host of [null, "", "evil.example", "127.0.0.1.evil.example", "192.168.1.5:3000", "localhost.evil.example"]) assert(!hostAllowed(host, {}), String(host));
-	assert(hostAllowed("tablet.lan:3000", { LH_ALLOWED_HOSTS: "tablet.lan, other.lan" }));
-	assert(!hostAllowed("third.lan", { LH_ALLOWED_HOSTS: "tablet.lan" }));
+	assert(hostAllowed("mac.tail1234.ts.net", { LH_ALLOWED_HOSTS: "mac.tail1234.ts.net, other.lan" }));
+	assert(!hostAllowed("third.lan", { LH_ALLOWED_HOSTS: "mac.tail1234.ts.net" }));
 });
 
-test("no cookie: pages and API are denied, each in its own surface", () => {
-	const page = accessDecision(req({ pathname: "/chat/abc" }), ENV);
-	assert(page.kind === "deny" && page.surface === "page");
-	const api = accessDecision(req({ pathname: "/api/chats" }), ENV);
-	assert(api.kind === "deny" && api.surface === "api");
-	assert.equal(accessDecision(req({ pathname: "/api/chats", cookieHeader: `${ACCESS_COOKIE}=${"x".repeat(40)}` }), ENV).kind, "deny", "wrong token");
-	assert.equal(accessDecision(req({ cookieHeader: `${ACCESS_COOKIE}=short` }), ENV).kind, "deny", "wrong length");
-});
-
-test("the paired cookie opens pages and API; other cookies do not", () => {
-	assert.deepEqual(accessDecision(req({ cookieHeader: paired }), ENV), { kind: "allow" });
-	assert.deepEqual(accessDecision(req({ pathname: "/api/chats", cookieHeader: `a=b; ${paired}; c=d` }), ENV), { kind: "allow" });
-	assert.equal(accessDecision(req({ cookieHeader: `other=${TOKEN}` }), ENV).kind, "deny");
-});
-
-test("pairing: a page visit with the token sets the cookie and redirects without it", () => {
-	assert.deepEqual(accessDecision(req({ pathname: "/", search: `?lh_token=${TOKEN}` }), ENV), { kind: "pair", token: TOKEN, location: "/" });
-	assert.deepEqual(accessDecision(req({ pathname: "/chat/abc", search: `?a=1&lh_token=${TOKEN}&b=2` }), ENV), { kind: "pair", token: TOKEN, location: "/chat/abc?a=1&b=2" });
-	assert.equal(accessDecision(req({ pathname: "/", search: "?lh_token=wrong" }), ENV).kind, "deny");
-	assert.equal(accessDecision(req({ pathname: "/api/chats", search: `?lh_token=${TOKEN}` }), ENV).kind, "deny", "the API never pairs");
-	assert.equal(accessDecision(req({ method: "POST", pathname: "/", search: `?lh_token=${TOKEN}` }), ENV).kind, "deny", "only GET pairs");
-});
-
-test("a short token fails closed, even with a matching cookie or pairing query", () => {
-	const env = { LH_ACCESS_TOKEN: "short" };
-	assert.equal(accessDecision(req({ cookieHeader: `${ACCESS_COOKIE}=short` }), env).kind, "deny");
-	assert.equal(accessDecision(req({ search: "?lh_token=short" }), env).kind, "deny");
-});
-
-test("host check covers pages, API and pairing", () => {
-	for (const over of [{ pathname: "/" }, { pathname: "/api/chats" }, { search: `?lh_token=${TOKEN}` }]) {
-		const d = accessDecision(req({ ...over, host: "evil.example", cookieHeader: paired }), ENV);
-		assert(d.kind === "deny" && d.reason === "host not allowed", JSON.stringify(over));
+test("row 1: a host that is not allowed is refused on pages, the API, health and pairing", () => {
+	for (const over of [{ pathname: "/" }, { pathname: "/api/chats" }, { pathname: "/api/health" }, { method: "POST", pathname: PAIR_PATH, origin: "https://evil.example" }]) {
+		const decision = decide({ ...over, host: "evil.example", cookieHeader: paired });
+		assert(decision.kind === "deny" && decision.status === 403 && decision.reason === "host not allowed", JSON.stringify(over));
 	}
-	assert.equal(accessDecision(req({ host: null, cookieHeader: paired }), ENV).kind, "deny");
+	assert.equal(decide({ host: null, cookieHeader: paired }).kind, "deny");
 });
 
-test("health is public on a good host, GET/HEAD only", () => {
-	assert.deepEqual(accessDecision(req({ pathname: "/api/health" }), ENV), { kind: "allow" });
-	assert.deepEqual(accessDecision(req({ method: "HEAD", pathname: "/api/health" }), ENV), { kind: "allow" });
-	assert.equal(accessDecision(req({ method: "POST", pathname: "/api/health" }), ENV).kind, "deny");
-	assert.equal(accessDecision(req({ pathname: "/api/health", host: "evil.example" }), ENV).kind, "deny");
-	assert.equal(accessDecision(req({ pathname: "/api/healthy" }), ENV).kind, "deny");
+test("row 2: health is public on a good host, GET/HEAD only", () => {
+	assert.deepEqual(decide({ pathname: "/api/health" }), { kind: "allow" });
+	assert.deepEqual(decide({ method: "HEAD", pathname: "/api/health" }), { kind: "allow" });
+	assert.equal(decide({ method: "POST", pathname: "/api/health" }).kind, "deny");
+	assert.equal(decide({ pathname: "/api/healthy" }).kind, "deny");
 });
 
-test("writes need a same-origin Origin", () => {
-	const post = (origin: string | null) => accessDecision(req({ method: "POST", pathname: "/api/chat", cookieHeader: paired, origin }), ENV);
-	assert.deepEqual(post(`http://${HOST}`), { kind: "allow" });
+test("row 4: the pairing form may be posted without a cookie, from this origin only", () => {
+	const post = (over: Partial<AccessRequest>) => decide({ method: "POST", pathname: PAIR_PATH, origin: ORIGIN, ...over });
+	assert.deepEqual(post({}), { kind: "allow" });
+	assert.deepEqual(post({ fetchMetadata: { site: "same-origin", mode: "navigate", dest: "document" } }), { kind: "allow" });
+	assert.equal(post({ origin: null }).kind, "deny", "no Origin");
+	assert.equal(post({ origin: "http://evil.example" }).kind, "deny", "foreign Origin");
+	assert.equal(post({ fetchMetadata: { site: "cross-site", mode: "navigate", dest: "document" } }).kind, "deny", "cross-site form");
+	assert.equal(decide({ pathname: PAIR_PATH }).kind, "deny", "GET is not pairing");
+});
+
+test("row 5: requests made by another site are refused, except opening a page", () => {
+	const crossSite = (over: Partial<AccessRequest>, mode = "cors", dest = "empty") => decide({ cookieHeader: paired, fetchMetadata: { site: "cross-site", mode, dest }, ...over });
+	assert.equal(crossSite({ pathname: "/api/chats" }).kind, "deny", "cross-site API read");
+	assert.equal(crossSite({ pathname: "/api/events" }, "navigate", "document").kind, "deny", "an API path is never a page load");
+	assert.equal(crossSite({ pathname: "/chat/abc" }, "no-cors", "image").kind, "deny", "cross-site subresource");
+	assert.equal(crossSite({ pathname: "/chat/abc" }, "navigate", "iframe").kind, "deny", "framing");
+	assert.deepEqual(crossSite({ pathname: "/chat/abc" }, "navigate", "document"), { kind: "allow" }, "opening the page");
+	assert.equal(decide({ pathname: "/api/chats", cookieHeader: paired, fetchMetadata: { site: "same-site", mode: "cors", dest: "empty" } }).kind, "deny", "same-site is still another origin");
+	for (const site of ["same-origin", "none"]) {
+		assert.deepEqual(decide({ pathname: "/api/chats", cookieHeader: paired, fetchMetadata: { site, mode: "cors", dest: "empty" } }), { kind: "allow" }, site);
+	}
+});
+
+test("row 6: an unpaired page load gets the pairing form and comes back to where it was going", () => {
+	assert.deepEqual(decide({ pathname: "/chat/abc", search: "?x=1" }), { kind: "pair", next: "/chat/abc?x=1" });
+	assert.deepEqual(decide({ method: "HEAD", pathname: "/" }), { kind: "pair", next: "/" });
+	const post = decide({ method: "POST", pathname: "/chat/abc", origin: ORIGIN });
+	assert(post.kind === "deny" && post.surface === "page", "a page write without a cookie is refused, not offered a form");
+});
+
+test("row 7: the unpaired API is refused as JSON, whatever the cookie says", () => {
+	const api = decide({ pathname: "/api/chats" });
+	assert(api.kind === "deny" && api.surface === "api" && api.status === 403 && /not paired/.test(api.reason));
+	for (const cookieHeader of [`${ACCESS_COOKIE}=${TOKEN}`, `${ACCESS_COOKIE}=v1.1.x`, `other=${paired}`, `${ACCESS_COOKIE}=${mintAccessCookie("cd".repeat(32), NOW)}`]) {
+		assert.equal(decide({ pathname: "/api/chats", cookieHeader }).kind, "deny", cookieHeader);
+	}
+});
+
+test("row 8: the paired cookie opens page and API reads, among other cookies", () => {
+	assert.deepEqual(decide({ cookieHeader: paired }), { kind: "allow" });
+	assert.deepEqual(decide({ pathname: "/api/chats", cookieHeader: `a=b; ${paired}; c=d` }), { kind: "allow" });
+	assert.deepEqual(decide({ method: "OPTIONS", pathname: "/api/chats", cookieHeader: paired }), { kind: "allow" });
+	// reads carry no Origin requirement (EventSource, plain navigation)
+	assert.deepEqual(decide({ pathname: "/api/events", cookieHeader: paired, origin: "http://evil.example" }), { kind: "allow" });
+});
+
+test("rows 9 and 10: a paired write needs the Origin of the host it was sent to", () => {
+	const post = (origin: string | null) => decide({ method: "POST", pathname: "/api/chat", cookieHeader: paired, origin });
+	assert.deepEqual(post(ORIGIN), { kind: "allow" });
 	assert.equal(post(null).kind, "deny", "no Origin");
 	assert.equal(post("http://evil.example").kind, "deny", "foreign Origin");
 	assert.equal(post("null").kind, "deny", "opaque Origin");
 	assert.equal(post("http://127.0.0.1:4000").kind, "deny", "other port");
-	for (const method of ["PUT", "PATCH", "DELETE"]) assert.equal(accessDecision(req({ method, pathname: "/api/x", cookieHeader: paired }), ENV).kind, "deny", method);
-	// reads carry no Origin requirement (EventSource, plain navigation)
-	assert.deepEqual(accessDecision(req({ pathname: "/api/events", cookieHeader: paired, origin: "http://evil.example" }), ENV), { kind: "allow" });
+	for (const method of ["PUT", "PATCH", "DELETE"]) assert.equal(decide({ method, pathname: "/api/x", cookieHeader: paired }).kind, "deny", method);
+});
+
+test("origins: HTTPS for a named host, either scheme on loopback, and no forwarded header is consulted", () => {
+	assert.deepEqual(expectedOrigins("mac.tail1234.ts.net"), ["https://mac.tail1234.ts.net"]);
+	assert.deepEqual(expectedOrigins("localhost:4747"), ["http://localhost:4747", "https://localhost:4747"]);
+	const env = { ...ENV, LH_ALLOWED_HOSTS: "mac.tail1234.ts.net" };
+	const write = (origin: string) => decide({ method: "POST", pathname: "/api/chat", host: "mac.tail1234.ts.net", cookieHeader: paired, origin }, env);
+	assert.deepEqual(write("https://mac.tail1234.ts.net"), { kind: "allow" });
+	assert.equal(write("http://mac.tail1234.ts.net").kind, "deny", "plain HTTP off loopback");
+});
+
+test("an expired cookie is no cookie", () => {
+	const later = NOW + 401 * 24 * 60 * 60 * 1000;
+	assert.equal(accessDecision(req({ pathname: "/api/chats", cookieHeader: paired }), ENV, later).kind, "deny");
 });
 
 test("health body: liveness, version, tokenMode only", () => {
@@ -95,32 +145,70 @@ test("health body: liveness, version, tokenMode only", () => {
 	assert.equal(healthBody(ENV).tokenMode, true);
 });
 
-test("proxy: 403 page, 403 JSON, pairing redirect with an HttpOnly Strict cookie, then through", () => {
+async function withToken(token: string | undefined, run: () => void | Promise<void>) {
 	const saved = process.env.LH_ACCESS_TOKEN;
-	const origin = `http://${HOST}`;
 	try {
-		process.env.LH_ACCESS_TOKEN = TOKEN;
-		const page = proxy(new NextRequest(origin + "/chat/new", { headers: { host: HOST } }));
-		assert.equal(page.status, 403);
-		assert.match(page.headers.get("content-type") ?? "", /text\/html/);
-		const api = proxy(new NextRequest(origin + "/api/chats", { headers: { host: HOST } }));
-		assert.equal(api.status, 403);
-		assert.match(api.headers.get("content-type") ?? "", /json/);
-		const pair = proxy(new NextRequest(`${origin}/?lh_token=${TOKEN}`, { headers: { host: HOST } }));
-		assert.equal(pair.status, 303);
-		assert.equal(pair.headers.get("location"), origin + "/");
-		const cookie = pair.headers.get("set-cookie") ?? "";
-		assert.match(cookie, new RegExp(`^${ACCESS_COOKIE}=${TOKEN}`));
-		assert.match(cookie, /HttpOnly/i);
-		assert.match(cookie, /SameSite=strict/i);
-		assert.match(cookie, /Path=\//);
-		const ok = proxy(new NextRequest(origin + "/api/chats", { headers: { host: HOST, cookie: `${ACCESS_COOKIE}=${TOKEN}` } }));
-		assert.equal(ok.headers.get("x-middleware-next"), "1");
-		assert.equal(proxy(new NextRequest(origin + "/api/health", { headers: { host: HOST } })).headers.get("x-middleware-next"), "1");
-		delete process.env.LH_ACCESS_TOKEN;
-		assert.equal(proxy(new NextRequest(origin + "/chat/new", { headers: { host: "anything" } })).headers.get("x-middleware-next"), "1", "off: open as before");
+		if (token === undefined) delete process.env.LH_ACCESS_TOKEN;
+		else process.env.LH_ACCESS_TOKEN = token;
+		await run();
 	} finally {
 		if (saved === undefined) delete process.env.LH_ACCESS_TOKEN;
 		else process.env.LH_ACCESS_TOKEN = saved;
 	}
+}
+
+const passedThrough = (response: Response) => response.headers.get("x-middleware-next") === "1";
+const liveCookie = () => `${ACCESS_COOKIE}=${mintAccessCookie(TOKEN, Date.now())}`;
+
+test("proxy: an unpaired page is the pairing form, with no app content and no way to frame or cache it", async () => {
+	await withToken(TOKEN, async () => {
+		const page = proxy(new NextRequest(`${ORIGIN}/chat/new?x=1`, { headers: { host: HOST } }));
+		assert.equal(page.status, 403);
+		assert.match(page.headers.get("content-type") ?? "", /text\/html/);
+		assert.equal(page.headers.get("x-frame-options"), "DENY");
+		assert.equal(page.headers.get("cache-control"), "private, no-store");
+		const html = await page.text();
+		assert.match(html, /This device isn't paired yet\./);
+		assert.match(html, new RegExp(`action="${PAIR_PATH}"`));
+		assert.match(html, /name="next" value="\/chat\/new\?x=1"/);
+	});
+});
+
+test("proxy: unpaired API is 403 JSON, a paired request passes with security headers, health stays public", async () => {
+	await withToken(TOKEN, () => {
+		const api = proxy(new NextRequest(`${ORIGIN}/api/chats`, { headers: { host: HOST } }));
+		assert.equal(api.status, 403);
+		assert.match(api.headers.get("content-type") ?? "", /json/);
+		assert.equal(api.headers.get("x-content-type-options"), "nosniff");
+
+		const page = proxy(new NextRequest(`${ORIGIN}/chat/new`, { headers: { host: HOST, cookie: liveCookie() } }));
+		assert(passedThrough(page));
+		assert.equal(page.headers.get("x-frame-options"), "DENY");
+		assert.equal(page.headers.get("referrer-policy"), "same-origin");
+		assert.equal(page.headers.get("cache-control"), "private, no-store");
+
+		const stream = proxy(new NextRequest(`${ORIGIN}/api/events`, { headers: { host: HOST, cookie: liveCookie() } }));
+		assert(passedThrough(stream));
+		assert.equal(stream.headers.get("cache-control"), null, "API routes keep their own cache policy");
+
+		assert(passedThrough(proxy(new NextRequest(`${ORIGIN}/api/health`, { headers: { host: HOST } }))));
+		const pairing = proxy(new NextRequest(ORIGIN + PAIR_PATH, { method: "POST", headers: { host: HOST, origin: ORIGIN } }));
+		assert(passedThrough(pairing), "the pairing form reaches its handler");
+	});
+});
+
+test("proxy: a malformed token closes the server with 503", async () => {
+	await withToken("short", () => {
+		assert.equal(proxy(new NextRequest(`${ORIGIN}/chat/new`, { headers: { host: HOST } })).status, 503);
+		assert.equal(proxy(new NextRequest(`${ORIGIN}/api/chats`, { headers: { host: HOST } })).status, 503);
+		assert(passedThrough(proxy(new NextRequest(`${ORIGIN}/api/health`, { headers: { host: HOST } }))));
+	});
+});
+
+test("proxy: with no token the server is open as before and adds no headers", async () => {
+	await withToken(undefined, () => {
+		const page = proxy(new NextRequest(`${ORIGIN}/chat/new`, { headers: { host: "anything" } }));
+		assert(passedThrough(page));
+		for (const name of ["x-frame-options", "referrer-policy", "x-content-type-options", "cache-control"]) assert.equal(page.headers.get(name), null, name);
+	});
 });

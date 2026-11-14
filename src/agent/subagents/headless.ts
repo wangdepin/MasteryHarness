@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { standardFontsDir } from "./pdf-ops";
+import { withoutAccessToken } from "../../core/access-env.ts";
 import { svgImageSource } from "../../../lib/svg-image-source";
 
 /**
@@ -136,7 +137,7 @@ export function parseBrowserServiceLine(line: string): number | null {
 export function browserServiceSpawnEnv(
 	env: Record<string, string | undefined>,
 ): Record<string, string | undefined> {
-	const out: Record<string, string | undefined> = { ...env };
+	const out: Record<string, string | undefined> = withoutAccessToken(env);
 	delete out.ELECTRON_RUN_AS_NODE;
 	delete out.LH_DEV_URL;
 	// The artifact renderer is not an authorized app API client.
@@ -283,6 +284,8 @@ async function withBrowserPage<T>(fn: (page: import("puppeteer-core").Page) => P
 		// system Chrome install itself via the "chrome" channel.
 		...(executablePath ? { executablePath } : { channel: "chrome" as const }),
 		args: ["--disable-gpu", "--no-sandbox", "--disable-dev-shm-usage"],
+		// Page content is model-written: it must not find the app's access token.
+		env: withoutAccessToken(process.env),
 	});
 	try {
 		const page = await browser.newPage();
