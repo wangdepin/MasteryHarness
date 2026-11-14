@@ -4,6 +4,7 @@
  * here; nothing under app/ touches src/store or src/agent directly.
  */
 
+export { healthBody } from "./health.ts";
 export * from "./chat-handler.ts";
 export * from "./events-stream.ts";
 export * from "./chats.ts";

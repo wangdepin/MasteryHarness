@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { isIP } from "node:net";
+import { accessDecision } from "./access-gate.ts";
 
 /** Browser-only mode: `next dev` / `next start` without the desktop shell's
  * per-launch secret. */
@@ -54,11 +55,31 @@ export function browserHostAllowed(host: string | null, env: Record<string, stri
 	return allowed.includes(hostname);
 }
 
+/** Token mode (LH_ACCESS_TOKEN, headless / the Android guest — fork, access-gate.ts): the paired cookie, a stricter
+ * Host allow-list and the Origin rule for writes. Off when no token is set. */
+export function tokenAccessRefusal(request: Request, env: Record<string, string | undefined> = process.env): string | undefined {
+	const url = new URL(request.url);
+	const decision = accessDecision({
+		method: request.method,
+		pathname: url.pathname,
+		search: url.search,
+		host: request.headers.get("host"),
+		origin: request.headers.get("origin"),
+		cookieHeader: request.headers.get("cookie"),
+	}, env);
+	return decision.kind === "deny" ? decision.reason : undefined;
+}
+
 /** Shared by Proxy and the streamed document route that deliberately bypasses
- * Proxy's truncated body clone. Check before any route-specific work. */
+ * Proxy's truncated body clone. Check before any route-specific work. Both policies apply and the stricter wins:
+ * the desktop capability / browser Host and cross-site rules, then the token-mode cookie gate. The route therefore
+ * cannot be reached without the pairing cookie just because Proxy skips it. */
 export function apiRequestRefusal(request: Request, env: Record<string, string | undefined> = process.env): string | undefined {
-	if (browserOnlyMode(env)) return browserAPIRefusal(request, env);
-	if (!desktopAPIAuthorized(request.headers, env)) return "Desktop API access requires the trusted LearnHarness window.";
+	if (browserOnlyMode(env)) {
+		const refusal = browserAPIRefusal(request, env);
+		if (refusal) return refusal;
+	} else if (!desktopAPIAuthorized(request.headers, env)) return "Desktop API access requires the trusted LearnHarness window.";
+	return tokenAccessRefusal(request, env);
 }
 
 const READ_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);

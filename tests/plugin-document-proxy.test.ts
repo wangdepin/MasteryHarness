@@ -39,7 +39,12 @@ it("Proxy retains API roots, siblings, endpoint lookalikes and all other API rou
 		"/api/plugins/document-one/other/documents/markdown", "/api/plugins/documents/markdown",
 		"/api/graph/import", "/api/events", "/api/chat", "/api/settings/models", "/api/chats/scratch/markdown",
 	]) assert.equal(proxyMatches(path), true, path);
+	// The fork's token-mode gate covers pages too (pairing redirect, 403 page), so Proxy matches them as well; only the
+	// build's static assets stay outside it.
 	for (const path of ["/", "/chat/new", "/apix", "/api-other/plugins/document-one/documents/markdown"]) {
+		assert.equal(proxyMatches(path), true, path);
+	}
+	for (const path of ["/_next/static/chunk.js", "/_next/image", "/favicon.ico"]) {
 		assert.equal(proxyMatches(path), false, path);
 	}
 });
