@@ -42,6 +42,8 @@ npm run dev -- -H 0.0.0.0     # then browse to http://<this machine's IP>:3000
 
 The API accepts `localhost` and IP addresses as the host name. To use any other name (`mymac.local`, a reverse-proxy domain), list it in `LH_ALLOWED_HOSTS`. Browser writes must come from the same origin as the page.
 
+To require a login instead, set `LH_ACCESS_TOKEN`: every page and API route then needs a paired device. [Using MasteryHarness from an iPhone](phone.md) covers the gate and a long-lived server behind Tailscale.
+
 ## Configuration
 
 Nonsecret settings are deltas in `<data root>/settings.json`; absent values resolve through `src/core/settings.ts` and `settings-resolution.ts`. Models and role overrides are settings, not environment variables. [Prompt overrides](../src/agent/prompts/README.md) live under `<data root>/prompts/` and require explicit enable switches.
@@ -54,6 +56,7 @@ Nonsecret settings are deltas in `<data root>/settings.json`; absent values reso
 | `TAVILY_API_KEY`, `BRAVE_API_KEY`, `EXA_API_KEY`, `FIRECRAWL_API_KEY`, `OLLAMA_API_KEY` | Optional search adapters. Without a Settings pin, the first keyed engine wins: Tavily → Brave → Exa → Firecrawl → Ollama. A pinned engine requires its own key; no silent fallback. Ollama search is hosted at ollama.com, not a local model server. Page fetching is independent; research can fetch known URLs without a search key. |
 | `DEEPGRAM_API_KEY` | Optional dictation token minting. |
 | `CHROME_PATH` | Chrome/Chromium executable fallback for demo verification; Electron's browser helper is primary. No extra Chromium is downloaded. |
+| `LH_ACCESS_TOKEN` | Optional access gate: 64 hexadecimal characters (`openssl rand -hex 32`). Set, every page and API route needs a device paired with this token; unset, there is no login. Ignored under the desktop shell. See [phone.md](phone.md). |
 | `LH_ALLOWED_HOSTS` | Browser-only mode: extra host names the API accepts besides `localhost` and IP addresses. Comma-separated, case-insensitive, port ignored, no wildcards. |
 
 Ordinary Next development can read `.env.local`. Real environment keys take precedence over saved keys. Saved auth is restrictive-permission plaintext, not an encrypted vault. Packaged Electron sets separate data/auth locations under `userData`; it does not use the repo development profile.
