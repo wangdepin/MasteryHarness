@@ -189,7 +189,7 @@ function anchorRect(anchor: SideThreadAnchor, composer: () => HTMLElement | null
 }
 
 function sideThreadViewport(): SideThreadViewport {
-	const viewport: SideThreadViewport = { width: window.innerWidth, height: window.innerHeight };
+	const viewport: SideThreadViewport = { width: window.innerWidth, height: window.visualViewport?.height ?? window.innerHeight };
 	const root = document.documentElement;
 	if (root.classList.contains("lh-electron") && root.dataset.lhPlatform === "darwin") {
 		const css = getComputedStyle(root);

@@ -67,8 +67,11 @@ function ItemRow({
 	/** Present on due rows only; upcoming rows are not selectable. */
 	selection?: { checked: boolean; onToggle: (id: string) => void };
 }) {
+	// A due row is a label: a tap anywhere on it toggles its checkbox.
+	const Row = selection ? "label" : "div";
 	return (
-		<li data-testid={`review-item-${item.id}`} className="flex items-start gap-3 py-2">
+		<li data-testid={`review-item-${item.id}`}>
+		<Row className={selection ? "flex cursor-pointer items-start gap-3 py-2" : "flex items-start gap-3 py-2"}>
 			{selection && (
 				<input
 					type="checkbox"
@@ -90,6 +93,7 @@ function ItemRow({
 				)}
 				{formatDue(item.dueAt, now)}
 			</span>
+		</Row>
 		</li>
 	);
 }

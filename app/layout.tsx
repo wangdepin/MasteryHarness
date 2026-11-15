@@ -3,12 +3,14 @@ import { JetBrains_Mono, Source_Sans_3 } from "next/font/google";
 import { connection } from "next/server";
 import "katex/dist/katex.min.css";
 import "./globals.css";
+import "./phone.css";
 import { AppShell, SidebarProvider } from "@/components/sidebar";
 import { ActivityProvider } from "@/components/activity-dock";
 import { ServerEventsProvider } from "@/components/server-events";
 import { AppearanceProvider } from "@/components/settings/appearance";
 import UpdateBanner from "@/components/update-banner";
 import MathCopy from "@/components/math-copy";
+import { PhoneViewport } from "@/components/phone/phone-viewport";
 import { PluginsProvider } from "@/components/plugins";
 import { readThemeBoot } from "@/src/server";
 
@@ -66,6 +68,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 			<UpdateBanner />
 			{/* Copying a selection that spans KaTeX yields TeX ($…$), not MathML soup. */}
 			<MathCopy />
+			{/* The visible height and the keyboard's, for app/phone.css. */}
+			<PhoneViewport />
 		</body>
 		</html>
 	);

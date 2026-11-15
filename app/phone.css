@@ -1,0 +1,143 @@
+/*
+ * THE PHONE LAYOUT (docs/phone.md). Everything a small touch screen needs,
+ * in one file, so the desktop styles in globals.css stay as they are.
+ * Imported after globals.css and unlayered, so a rule here wins over the
+ * Tailwind utility it adjusts. Three conditions, each for a different
+ * thing:
+ *
+ *   (pointer: coarse)   touch details: sizes a finger and iOS need
+ *   (width < 40rem)     layout: what does not fit a narrow screen
+ *   [data-drawer]       the sidebar as a drawer; set from JavaScript by
+ *                       components/phone/use-sidebar-drawer.ts
+ *
+ * The two lengths --lh-app-height and --lh-keyboard-inset are set on <html>
+ * by components/phone/phone-viewport.tsx, on touch devices only.
+ */
+
+/* ── Safe areas ──────────────────────────────────────────────────────────
+   The viewport covers the notch and the home indicator (viewport-fit:
+   cover in app/layout.tsx). Both insets are 0 where there is none, which
+   leaves these two rules without effect on a desktop. */
+
+/* The page's top bar: its 60px (h-15) plus the status bar. */
+.lh-safe-top {
+	height: calc(var(--spacing) * 15 + env(safe-area-inset-top, 0px));
+	padding-top: env(safe-area-inset-top, 0px);
+}
+
+/* The last row of a page. The keyboard covers the home indicator, so the
+   inset is dropped while it is up. */
+.lh-safe-bottom {
+	padding-bottom: max(0px, env(safe-area-inset-bottom, 0px) - var(--lh-keyboard-inset, 0px));
+}
+
+/* ── The sidebar as a drawer ─────────────────────────────────────────────
+   Over the page instead of beside it. Closed is off-screen and hidden, so
+   nothing in it can take focus. Open carries no transform: a transformed
+   ancestor would become the containing block of the row menu. */
+aside[data-drawer] {
+	position: fixed;
+	inset-block: 0;
+	left: 0;
+	z-index: 45;
+	width: min(18rem, 85vw);
+}
+
+aside[data-drawer="closed"] {
+	transform: translateX(-100%);
+	visibility: hidden;
+	transition: transform 200ms, visibility 0s 200ms;
+}
+
+aside[data-drawer="open"] {
+	transform: none;
+	visibility: visible;
+	box-shadow: 0 0 2rem rgb(0 0 0 / 0.35);
+	transition: transform 200ms;
+}
+
+aside[data-drawer] > div {
+	width: 100%;
+	padding-top: env(safe-area-inset-top, 0px);
+	padding-bottom: env(safe-area-inset-bottom, 0px);
+	padding-left: env(safe-area-inset-left, 0px);
+}
+
+/* ── Touch details ───────────────────────────────────────────────────── */
+@media (pointer: coarse) {
+	/* The page is as tall as what is visible, so the keyboard pushes the
+	   composer up instead of covering it. Every page shell is h-dvh. */
+	.h-dvh {
+		height: var(--lh-app-height, 100dvh);
+	}
+
+	.min-h-dvh {
+		min-height: var(--lh-app-height, 100dvh);
+	}
+
+	/* iOS zooms the page when a focused field's text is smaller than 16px,
+	   and does not zoom back. A field in the reader's own prose size keeps
+	   that size when it is larger. */
+	input,
+	textarea,
+	select {
+		font-size: 16px;
+	}
+
+	:is(input, textarea, select):is(.lh-prose, [class*="lh-prose-size"]) {
+		font-size: max(16px, var(--lh-prose-size));
+	}
+
+	/* A held finger on a session row opens the row menu
+	   (components/phone/session-row-actions.ts), not the system callout or
+	   a text selection. */
+	[data-session-row] {
+		-webkit-touch-callout: none;
+		-webkit-user-select: none;
+		user-select: none;
+	}
+
+	/* Review: targets a finger can hit. */
+	[data-testid="review-start"] {
+		min-height: 2.75rem;
+		padding-inline: 1rem;
+		font-size: 0.875rem;
+	}
+
+	[data-testid^="review-item-"] input[type="checkbox"] {
+		width: 1.25rem;
+		height: 1.25rem;
+	}
+}
+
+/* ── Narrow screens ──────────────────────────────────────────────────── */
+@media (width < 40rem) {
+	/* The session title, 30px on a desktop, and its rename field. */
+	[data-plugin-chrome-title] {
+		font-size: 1.25rem;
+		line-height: 1.75rem;
+	}
+
+	/* The phase label gives way to the title; the Plan chip and the
+	   coverage ring stay. */
+	[data-testid="phase-chip"] {
+		display: none;
+	}
+
+	/* The docked side question: a sheet from the bottom, above the
+	   keyboard, instead of a 22rem column beside the lesson. */
+	[data-testid="side-thread-panel"] {
+		position: fixed;
+		inset-inline: 0;
+		bottom: var(--lh-keyboard-inset, 0px);
+		z-index: 60;
+		width: auto;
+		height: min(32rem, 70%);
+		max-height: calc(var(--lh-app-height, 100dvh) - 4rem);
+		border-left: 0;
+		border-top: 1px solid var(--border);
+		border-radius: 1rem 1rem 0 0;
+		padding-bottom: calc(0.75rem + max(0px, env(safe-area-inset-bottom, 0px) - var(--lh-keyboard-inset, 0px)));
+		box-shadow: 0 -0.5rem 2rem rgb(0 0 0 / 0.35);
+	}
+}

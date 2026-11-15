@@ -100,6 +100,15 @@ export function observeSelectionActions({ element, getActionElement, restoreAfte
 		gesture = false;
 		schedule(event.detail >= 2 ? MULTI_CLICK_SETTLE_MS : 0, { x: event.clientX, y: event.clientY });
 	};
+	// A finger has no mouseup to end its press on: the browser takes a
+	// long-press selection over (pointercancel), and dragging the selection
+	// handles reports only selectionchange. Mark the press over, so those
+	// changes are read; a lift also reads the selection as it stands.
+	const touchEnd = (event: PointerEvent) => {
+		if (event.pointerType !== "touch" || onAction(event.target)) return;
+		pointerDown = gesture = false;
+		if (event.type === "pointerup") schedule(0, null);
+	};
 	const keyDown = (event: KeyboardEvent) => {
 		if (event.key === "Escape") { if (shown || timer !== undefined) dismiss("cancel"); return; }
 		pointerDown = false;
@@ -118,6 +127,8 @@ export function observeSelectionActions({ element, getActionElement, restoreAfte
 
 	document.addEventListener("pointerdown", pointerDownCapture, true);
 	document.addEventListener("mouseup", mouseUp, true);
+	document.addEventListener("pointerup", touchEnd, true);
+	document.addEventListener("pointercancel", touchEnd, true);
 	document.addEventListener("keydown", keyDown, true);
 	document.addEventListener("focusin", focusIn, true);
 	element.addEventListener("contextmenu", contextMenu);
@@ -137,6 +148,8 @@ export function observeSelectionActions({ element, getActionElement, restoreAfte
 			if (scrollTimer !== undefined) view.clearTimeout(scrollTimer);
 			document.removeEventListener("pointerdown", pointerDownCapture, true);
 			document.removeEventListener("mouseup", mouseUp, true);
+			document.removeEventListener("pointerup", touchEnd, true);
+			document.removeEventListener("pointercancel", touchEnd, true);
 			document.removeEventListener("keydown", keyDown, true);
 			document.removeEventListener("focusin", focusIn, true);
 			element.removeEventListener("contextmenu", contextMenu);

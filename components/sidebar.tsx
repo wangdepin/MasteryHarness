@@ -4,6 +4,10 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { MenuShell } from "@/components/menu-shell";
+import { exportSessionMarkdown } from "@/components/phone/export-session";
+import { useRowLongPress } from "@/components/phone/session-row-actions";
+import { SidebarBackdrop } from "@/components/phone/sidebar-backdrop";
+import { useSidebarDrawer } from "@/components/phone/use-sidebar-drawer";
 import { DeleteSessionDialog } from "@/components/delete-session-dialog";
 import type { ChatDeleteMode, ChatState, ThemeMode } from "@/src/core";
 import { ChevronRightIcon, DumbbellIcon, PanelLeftCloseIcon, PanelLeftOpenIcon, PinIcon, PlusIcon, SearchIcon, SettingsIcon } from "lucide-react";
@@ -96,9 +100,11 @@ declare global {
 	}
 }
 
-const SidebarContext = createContext<{ open: boolean; toggle: () => void }>({
+const SidebarContext = createContext<{ open: boolean; toggle: () => void; /** Shown over the page (a phone), not beside it. */ drawer: boolean; closeDrawer: () => void }>({
 	open: false,
 	toggle: () => {},
+	drawer: false,
+	closeDrawer: () => {},
 });
 
 export function useSidebar() {
@@ -118,6 +124,7 @@ export function SidebarProvider({ children }: { children: React.ReactNode }) {
 	const [open, setOpen] = useState(false);
 	const [narrow, setNarrow] = useState(false);
 	const [mounted, setMounted] = useState(false);
+	const drawer = useSidebarDrawer(!IS_ELECTRON);
 
 	useEffect(() => {
 		// Electron shell detection (merged chrome, 2026-09-17): keys the
@@ -160,6 +167,7 @@ export function SidebarProvider({ children }: { children: React.ReactNode }) {
 	}, []);
 
 	const toggle = useCallback(() => {
+		if (drawer.active) return drawer.toggle();
 		// Opening while narrow (auto-closed, or the user's own closed-at-
 		// narrow): ask the shell to widen to the threshold — the resize
 		// listener flips `narrow` and the sidebar appears. The preference
@@ -175,7 +183,7 @@ export function SidebarProvider({ children }: { children: React.ReactNode }) {
 			localStorage.setItem(STORAGE_KEY, v ? "0" : "1");
 			return !v;
 		});
-	}, [narrow, open]);
+	}, [narrow, open, drawer]);
 
 	// ⌘B: the global shortcut dispatches kbdEventForAction("toggle-sidebar")
 	// and the context answers on exactly that name — the shared spelling
@@ -191,9 +199,10 @@ export function SidebarProvider({ children }: { children: React.ReactNode }) {
 	}, [toggle]);
 
 	return (
-		<SidebarContext.Provider value={{ open: open && !narrow, toggle }}>
+		<SidebarContext.Provider value={{ open: drawer.active ? drawer.open : open && !narrow, toggle, drawer: drawer.active, closeDrawer: drawer.close }}>
 			{/* transitions gated on mount: no slide-in flash on page load */}
 			<div className={cn("flex h-dvh", mounted && "[&_.sidebar-motion]:transition-[width,margin,opacity]")}>{children}</div>
+			<SidebarBackdrop drawer={drawer} />
 		</SidebarContext.Provider>
 	);
 }
@@ -323,6 +332,7 @@ export function SessionRow({
 			onContextMenu={onContextMenu}
 			data-testid={kbdSelected ? "session-row-kbd" : "session-row"}
 			data-session-row=""
+			data-chat-id={chat.id}
 			className={cn(
 				"relative mb-0.5 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left transition-colors hover:bg-accent",
 				active && "bg-accent",
@@ -413,7 +423,7 @@ const ARCHIVED_OPEN_KEY = "lh:archived-open";
 
 function SessionsSidebar() {
 	const interactions = useInteractionLayers();
-	const { open, toggle } = useSidebar();
+	const { open, toggle, drawer, closeDrawer } = useSidebar();
 	const [chats, setChats] = useState<ChatListItem[] | null>(null);
 	const [query, setQuery] = useState("");
 	const [kindFilter, setKindFilter] = useState<SessionKindFilter>("all");
@@ -584,11 +594,16 @@ function SessionsSidebar() {
 	const [deleting, setDeleting] = useState<ChatListItem | null>(null);
 	const ctxChat = ctxChatId === null ? undefined : chats?.find((c) => c.id === ctxChatId);
 
+	const openRowMenu = (row: HTMLElement, chatId: string) => {
+		ctxAnchorRef.current = row;
+		setCtxChatId(chatId);
+	};
 	const openContext = (e: React.MouseEvent<HTMLButtonElement>, chat: ChatListItem) => {
 		e.preventDefault(); // suppress the native menu
-		ctxAnchorRef.current = e.currentTarget;
-		setCtxChatId(chat.id);
+		openRowMenu(e.currentTarget, chat.id);
 	};
+	// A held finger is the touch screen's right-click.
+	const rowLongPress = useRowLongPress((row) => { if (row.dataset.chatId) openRowMenu(row, row.dataset.chatId); });
 
 	// One row of any group. The walk index is the row's place among the rows
 	// the keyboard cycles (`shown`), so it is the same in every group.
@@ -604,6 +619,7 @@ function SessionsSidebar() {
 				archivedLabel={groups?.searching === true && !!c.archivedAt}
 				onOpen={() => {
 					setKbdIndex(null);
+					closeDrawer(); // also when the row is the session already open
 					router.push(`/chat/${c.id}`);
 				}}
 				onContextMenu={(e) => openContext(e, c)}
@@ -714,6 +730,7 @@ function SessionsSidebar() {
 	return (
 		<aside
 			className={cn("sidebar-motion shrink-0 overflow-hidden duration-200", open ? "w-72" : "w-0")}
+			data-drawer={drawer ? (open ? "open" : "closed") : undefined}
 			aria-hidden={!open}
 		>
 			<div className="flex h-full w-72 flex-col border-r bg-background">
@@ -874,7 +891,7 @@ function SessionsSidebar() {
 					))}
 				</div>
 
-				<div ref={listRef} className="flex-1 overflow-y-auto p-2">
+				<div ref={listRef} {...rowLongPress} className="flex-1 overflow-y-auto p-2">
 					{groups === null ? (
 						<div className="px-2 py-4 text-xs text-muted-foreground">Loading…</div>
 					) : groups.pinned.length + groups.main.length + groups.archived.length === 0 ? (
@@ -993,9 +1010,10 @@ function SessionsSidebar() {
 							{ctxChat?.archivedAt ? "Unarchive" : "Archive"}
 						</button>
 						{/* Export as Markdown (owner, release polish 2026-10-06): the
-					    session-markdown engine's user-facing debut — same-origin
-						    anchor download; the route's Content-Disposition names the
-						    file. Sits with the management actions, above Delete (the
+					    session-markdown engine's user-facing debut — a same-origin
+						    download (the route's Content-Disposition names the file),
+						    or the share sheet on a phone (components/phone/export-session.ts).
+						    Sits with the management actions, above Delete (the
 						    destructive action stays last — the danger-fence law). */}
 						<button
 							type="button"
@@ -1003,12 +1021,7 @@ function SessionsSidebar() {
 							onClick={() => {
 								const chatId = ctxChatId;
 								setCtxChatId(null);
-								const a = document.createElement("a");
-								a.href = `/api/chats/${chatId}/markdown`;
-								a.download = ""; // the route's filename wins
-								document.body.appendChild(a);
-								a.click();
-								a.remove();
+								if (chatId) void exportSessionMarkdown(chatId);
 							}}
 							className="flex items-center rounded-lg px-2.5 py-1.5 text-left text-foreground transition-colors hover:bg-accent"
 						>

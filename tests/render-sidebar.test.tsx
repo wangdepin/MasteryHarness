@@ -117,6 +117,13 @@ describe("SessionRow", () => {
 		assert.doesNotMatch(html, /Waiting for input/);
 	});
 
+	it("carries its session id, which is how a long press on a phone finds the session", () => {
+		const html = render(item({ id: "chat_42" }));
+		assert.match(html, /data-session-row=""/);
+		assert.match(html, /data-chat-id="chat_42"/);
+		assert.doesNotMatch(html, /data-drawer/, "the drawer is the sidebar's state, never a row's");
+	});
+
 	it("active row is visually marked by the background alone (owner, round 5: no weight change)", () => {
 		const html = render(item({}), true);
 		assert.ok(html.includes("bg-accent"), "active background");

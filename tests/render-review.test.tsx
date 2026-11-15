@@ -108,6 +108,7 @@ describe("ReviewBody", () => {
 		assert.ok(html.includes("Start review (1)"));
 		assert.match(html, /aria-label="Review Name a"[^>]*checked|checked[^>]*aria-label="Review Name a"/);
 		assert.equal((html.match(/type="checkbox"/g) ?? []).length, 2);
+		assert.equal((html.match(/<label/g) ?? []).length, 2, "each due row is a label: a tap anywhere on it toggles its checkbox");
 	});
 
 	it("Start is disabled with nothing selected, and while busy", () => {
@@ -130,6 +131,7 @@ describe("ReviewBody", () => {
 		assert.ok(html.includes("Upcoming · 1"));
 		assert.ok(html.includes("in 4d"));
 		assert.ok(!html.includes('type="checkbox"'));
+		assert.ok(!html.includes("<label"), "an upcoming row selects nothing");
 	});
 });
 
