@@ -125,6 +125,27 @@ aside[data-drawer] > div {
 		display: none;
 	}
 
+	/* The graph's controls, top right of the home page, share their row
+	   with the open-sidebar button at the top left and must stop short of
+	   it. The row takes the width its column is capped at instead of the
+	   width of its content, so the search field is what gives way; a
+	   browser that will not shrink a field below its text would otherwise
+	   push the row out to the left, over the button. */
+	.lh-wco-floating > :first-child {
+		align-self: stretch;
+		justify-content: flex-end;
+	}
+
+	/* Chains and Extract files: the icon alone. The label stays in the
+	   markup as the button's name. */
+	:is([data-testid="open-chain-table"], [data-testid="import-notes"]) {
+		width: 1.75rem;
+		justify-content: center;
+		gap: 0;
+		padding-inline: 0;
+		font-size: 0;
+	}
+
 	/* The docked side question: a sheet from the bottom, above the
 	   keyboard, instead of a 22rem column beside the lesson. */
 	[data-testid="side-thread-panel"] {
