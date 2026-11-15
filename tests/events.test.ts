@@ -77,6 +77,14 @@ function decode(chunk: Uint8Array): string {
 	return new TextDecoder().decode(chunk);
 }
 
+/** A reader past the comment every connection starts with. */
+async function opened(res: Response): Promise<ReadableStreamDefaultReader<Uint8Array>> {
+	const reader = res.body!.getReader();
+	const { value } = await reader.read();
+	assert.equal(decode(value!), ": open\n\n", "the first bytes go out at once, so the browser reports the channel open");
+	return reader;
+}
+
 describe("eventsResponse (the SSE seam)", () => {
 	it("holds an SSE response: event frames as they are emitted", async () => {
 		const res = eventsResponse();
@@ -84,7 +92,7 @@ describe("eventsResponse (the SSE seam)", () => {
 		assert.equal(res.headers.get("Content-Type"), "text/event-stream");
 		assert.equal(res.headers.get("Cache-Control"), "no-cache, no-transform");
 		assert.equal(res.headers.get("X-Accel-Buffering"), "no");
-		const reader = res.body!.getReader();
+		const reader = await opened(res);
 		// The listener attached synchronously in start() — emit NOW lands
 		// as a queued chunk (no race, single-threaded).
 		emit("turn-started", { chatId: "chat_x" });
@@ -101,8 +109,8 @@ describe("eventsResponse (the SSE seam)", () => {
 	it("cancel() unsubscribes — later emits reach OTHER windows only", async () => {
 		const first = eventsResponse();
 		const second = eventsResponse();
-		const r1 = first.body!.getReader();
-		const r2 = second.body!.getReader();
+		const r1 = await opened(first);
+		const r2 = await opened(second);
 		await r1.cancel(); // window one goes away
 		emit("turn-settled", { chatId: "chat_y" });
 		// window two still receives…
@@ -119,7 +127,7 @@ describe("eventsResponse (the SSE seam)", () => {
 		// self-closes. Pin the difference: settled events do NOT close the
 		// stream — it stays live for the next event.
 		const res = eventsResponse();
-		const reader = res.body!.getReader();
+		const reader = await opened(res);
 		emit("turn-settled", { chatId: "chat_z" });
 		await reader.read();
 		emit("chats-changed", {});

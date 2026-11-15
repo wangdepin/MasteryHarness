@@ -50,6 +50,7 @@ import { isInteractionScopeEligible } from "./plugin-input-focus";
 import { JobsContext } from "@/components/jobs-context";
 import { StatsBar } from "@/components/stats-bar";
 import { useServerEvent, useServerResync } from "@/components/server-events";
+import { useForegroundReattach } from "@/components/use-foreground-reattach";
 import {
 	isProviderKeyRefusal,
 	firstSourceTextParts,
@@ -614,6 +615,7 @@ export function Chat({
 		setTurnInFlight(true);
 		void resumeStream();
 	}, [resumeStream]);
+	useForegroundReattach({ status, evaluating, turnInFlight, error }, clearError, attachToRunningTurn);
 
 	// The practice dock's send (ONE lane, owner 2026-10-05): POSTs the
 	// thinking against the ACTIVE problem — whether it claims an answer is

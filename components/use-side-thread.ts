@@ -59,7 +59,7 @@ export function sideThreadReducer(state: SideThreadState | null, action: SideThr
 	};
 	if (action.type === "start") return { ...state, answering: true, streamText: "", error: undefined, failedQuestion: undefined };
 	if (action.type === "accepted") return { ...state, pendingPassage: undefined };
-	if (action.type === "text") return { ...state, answering: true, streamText: action.text };
+	if (action.type === "text") return { ...state, answering: true, streamText: action.text, error: undefined };
 	return { ...state, answering: false, error: action.error, failedQuestion: action.question };
 }
 
@@ -98,14 +98,15 @@ export function useSideThread(chatId: string, messages: readonly LhMessage[], ge
 			setThreads(payload.threads);
 			const current = stateRef.current;
 			const thread = current && payload.threads.find((entry) => entry.id === current.threadId);
-			if (thread) dispatch({ type: "snapshot", thread,
-				answering: Object.hasOwn(payload.answering, thread.id), text: payload.answering[thread.id] ?? "" });
+			if (!thread) return;
+			const answering = Object.hasOwn(payload.answering, thread.id);
+			dispatch({ type: "snapshot", thread, answering, text: payload.answering[thread.id] ?? "" });
+			return answering ? thread : undefined;
 		} catch { /* a later change/resync retries a detached view's read */ }
 	}, [chatId]);
 	useEffect(() => { void refresh(); return () => { refreshSerial.current++; connection.current?.controller.abort(); }; }, [refresh]);
 	useServerEvent("side-chats-changed", (event) => { if (event.chatId === chatId) void refresh(); });
 	useServerEvent("record-changed", (event) => { if (event.chatId === chatId) void refresh(); });
-	useServerResync(() => { void refresh(); });
 
 	const consume = useCallback(async (response: Response, threadId: string, token: number) => {
 		if (token !== connection.current?.token) { await response.body?.cancel(); return; }
@@ -150,6 +151,9 @@ export function useSideThread(chatId: string, messages: readonly LhMessage[], ge
 			.then((response) => consume(response, thread.id, token))
 			.catch((error) => { if (!controller.signal.aborted && token === connection.current?.token) dispatch({ type: "error", threadId: thread.id, error: String(error.message ?? error) }); });
 	}, [chatId, consume]);
+	// The channel reopened (a phone back from the background): the stream of
+	// an answer still being written may be dead. Subscribe to it again.
+	useServerResync(() => { void refresh().then((answering) => { if (answering) attach(answering); }); });
 	const open = useCallback(({ anchor, passage, sourceMessageId, questionCallId }: SideThreadOpenArgs) => {
 		const source = sourceMessageId ?? passage?.sourceMessageId ?? (questionCallId ? messagesRef.current.find((message) => message.role === "assistant" &&
 			message.content.some((block) => block.type === "toolCall" && block.id === questionCallId))?.id : undefined);

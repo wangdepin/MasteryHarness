@@ -67,6 +67,27 @@ describe("notify hub + wireSource (the client channel wiring)", () => {
 		assert.equal(resyncs, 2);
 	});
 
+	it("reopening (back to the foreground): the old source is closed, and the new one's open resyncs once", () => {
+		const hub = createNotifyHub();
+		let resyncs = 0;
+		hub.onResync(() => resyncs++);
+		const first = fakeSource();
+		const disconnect = wireSource(first, hub);
+		first.open();
+		disconnect(); // the provider's effect cleanup, before it wires the next source
+		const second = fakeSource();
+		wireSource(second, hub);
+		assert.equal(first.closed, true);
+		assert.equal(second.closed, false);
+		assert.equal(resyncs, 1, "nothing resyncs until the new channel is open");
+		second.open();
+		assert.equal(resyncs, 2);
+		const got: string[] = [];
+		hub.subscribe("turn-started", (p) => got.push(p.chatId));
+		second.push("turn-started", { chatId: "chat_back" });
+		assert.deepEqual(got, ["chat_back"], "subscribers made before the reopen hear the new source");
+	});
+
 	it("a throwing handler never breaks its neighbors (the bus's isolation law)", () => {
 		const hub = createNotifyHub();
 		const src = fakeSource();

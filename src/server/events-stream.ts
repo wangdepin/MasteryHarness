@@ -61,6 +61,11 @@ export function eventsResponse(): Response {
 				const { type, ...payload } = event;
 				frame(`event: ${type}\ndata: ${JSON.stringify(payload)}\n\n`);
 			});
+			// A first byte at once: the response head is sent with the first
+			// chunk, and a browser reports the channel open (the client's
+			// resync) only when it has the head. Without this an idle server
+			// leaves a reopened channel pending until the first ping.
+			frame(": open\n\n");
 			heartbeat = setInterval(() => frame(": ping\n\n"), 25_000);
 
 			teardown = stop;

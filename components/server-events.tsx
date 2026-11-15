@@ -24,7 +24,8 @@
  * React glue is an adapter seam like lh:turn-state (untested by
  * precedent, components/session.ts).
  */
-import { createContext, useContext, useEffect, useMemo, useRef, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useForegroundReturn } from "./use-foreground-return";
 import { SERVER_EVENT_TYPES, type ServerEventType, type ServerEvents } from "@/src/core";
 
 /** The minimal source surface the provider consumes — EventSource behind
@@ -121,7 +122,12 @@ export function useNotifyHub() { return useContext(EventsContext); }
 
 export function ServerEventsProvider({ children, connect }: { children: ReactNode; connect?: () => NotifySource }) {
 	const hub = useMemo(() => createNotifyHub(), []);
-	useEffect(() => wireSource((connect ?? openEventsChannel)(), hub), [hub, connect]);
+	// A page back from the background (a phone's lock screen, another app)
+	// may hold a socket that died silently, and EventSource can take long to
+	// notice. Open a fresh one on every return: its open is the resync.
+	const [attempt, setAttempt] = useState(0);
+	useForegroundReturn(() => setAttempt((n) => n + 1));
+	useEffect(() => wireSource((connect ?? openEventsChannel)(), hub), [hub, connect, attempt]);
 	return <EventsContext.Provider value={hub}>{children}</EventsContext.Provider>;
 }
 

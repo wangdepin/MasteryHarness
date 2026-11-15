@@ -114,7 +114,7 @@ async function turnInFlight(model: SessionModel): Promise<boolean | null> {
 	}
 }
 
-const STREAM_DROPPED = "The connection dropped before the turn completed.";
+export const STREAM_DROPPED = "The connection dropped before the turn completed.";
 
 /** Mark transport failures without confusing JSON/application bugs with drops. */
 class StreamReadError extends Error {

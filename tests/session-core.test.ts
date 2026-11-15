@@ -21,7 +21,7 @@
  */
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
-import { absorbed, pendingCallTool, SessionModel } from "../components/session-core.ts";
+import { absorbed, pendingCallTool, SessionModel, STREAM_DROPPED } from "../components/session-core.ts";
 import type { ChatInput } from "../src/core/input-events.ts";
 import type { LhMessage } from "../src/core/native-messages.ts";
 import { newUserMessage, newAnswerResult, newThinkingMessage, needsContinuation, endsInDismissal, pendingQuestionOf } from "../src/core/native-messages.ts";
@@ -831,6 +831,37 @@ describe("truncated stream recovery", () => {
 		assert.equal(streams, 2);
 		assert.equal(m.status, "error");
 		assert.equal(m.getState().error?.message, "The connection dropped before the turn completed.");
+	});
+
+	it("resuming after the dropped-connection error replays the turn and ends ready (the return to the foreground)", async () => {
+		let streams = 0;
+		const m = model({ fetch: dietFetch({ userText: "go", settledMessages: [assistantMsg("saved-complete", "complete")], stream: () => ++streams <= 2 ? truncated() : completed() }) });
+		await m.send({ type: "text", text: "go" });
+		assert.equal(m.getState().error?.message, STREAM_DROPPED);
+		m.clearError();
+		await m.resumeStream();
+		assert.equal(streams, 3);
+		assert.equal(m.status, "ready");
+		assert.equal(m.getState().error, null);
+		assert.equal(m.getState().nativeMessages.filter(m => m.role === "assistant").length, 1);
+		assert.equal(m.getState().messages.at(-1)!.parts.at(-1)!.text, "complete");
+	});
+
+	it("resuming a turn that settled while the page was away adopts the saved record", async () => {
+		let streams = 0;
+		let settled = 0;
+		const m = model({
+			onReattachSettled: () => settled++,
+			fetch: dietFetch({ userText: "go", settledMessages: [assistantMsg("saved-complete", "complete")], stream: () => ++streams <= 2 ? truncated() : sseResponse({ type: "turn-settled" }, "[DONE]") }),
+		});
+		await m.send({ type: "text", text: "go" });
+		assert.equal(m.status, "error");
+		m.clearError();
+		await m.resumeStream();
+		assert.equal(m.status, "ready");
+		assert.equal(m.getState().error, null);
+		assert.equal(settled, 1);
+		assert.equal(m.getState().messages.at(-1)!.parts.at(-1)!.text, "complete");
 	});
 
 	it("a superseded consume cannot recover or overwrite its replacement's state", async () => {

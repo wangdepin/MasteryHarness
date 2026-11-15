@@ -42,6 +42,14 @@ describe("one durable side companion", () => {
 		assert.equal(state?.streamText, "One sentence.");
 		assert.equal(state?.answering, true);
 	});
+	it("clears a disconnect error once the answer is streaming again", () => {
+		let state = reduce(open(), { type: "error", threadId: thread.id, error: "The side answer disconnected." });
+		state = reduce(state, { type: "snapshot", thread, answering: true, text: "Half an" });
+		assert.equal(state?.error, "The side answer disconnected.", "a snapshot alone proves no live stream");
+		state = reduce(state, { type: "text", threadId: thread.id, text: "Half an answer" });
+		assert.equal(state?.error, undefined);
+		assert.equal(state?.answering, true);
+	});
 	it("never lets a detached stream overwrite the newly opened thread", () => {
 		const next = reduce(open(), { type: "open", segmentId: "next", anchor });
 		assert.equal(reduce(next, { type: "text", threadId: thread.id, text: "STALE" }), next);
