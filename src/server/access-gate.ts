@@ -2,6 +2,7 @@ import { ACCESS_COOKIE, accessCookieValid, cookieValue } from "./access-cookie.t
 import { crossSiteRequest, isApiPath, type FetchMetadata } from "./access-fetch-metadata.ts";
 import { hostAllowed, originMatchesHost } from "./access-host.ts";
 import { PAIR_PATH } from "./access-pairing-page.ts";
+import { isPublicPath } from "./access-public-paths.ts";
 import { accessToken, gateMode } from "./access-token.ts";
 
 /**
@@ -79,6 +80,7 @@ export function accessDecision(req: AccessRequest, env: Env = process.env, nowMs
 	if (!hostAllowed(req.host, env)) return deny("host not allowed");
 	if (req.pathname === HEALTH_PATH && isRead(req.method)) return ALLOW;
 	if (mode === "misconfigured") return deny("LH_ACCESS_TOKEN must be 64 hexadecimal characters", 503);
+	if (isPublicPath(req.pathname) && isRead(req.method)) return ALLOW;
 	if (crossSiteRequest(req.method, req.pathname, req.fetchMetadata)) return deny("cross-site request");
 	if (isPairingSubmission(req)) return ALLOW;
 	if (!isPaired(req, env, nowMs)) {

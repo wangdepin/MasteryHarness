@@ -66,6 +66,18 @@ test("row 2: health is public on a good host, GET/HEAD only", () => {
 	assert.equal(decide({ pathname: "/api/healthy" }).kind, "deny");
 });
 
+test("row 3: the manifest and the home-screen icons are public reads, and nothing near them is", () => {
+	for (const pathname of ["/manifest.webmanifest", "/apple-icon.png", "/icon-192.png", "/icon-512.png"]) {
+		assert.deepEqual(decide({ pathname }), { kind: "allow" }, pathname);
+		assert.deepEqual(decide({ method: "HEAD", pathname }), { kind: "allow" }, pathname);
+		assert.deepEqual(decide({ pathname, fetchMetadata: { site: "cross-site", mode: "no-cors", dest: "image" } }), { kind: "allow" }, pathname);
+		assert.equal(decide({ method: "POST", pathname, origin: ORIGIN }).kind, "deny", pathname);
+		assert.equal(decide({ pathname, host: "evil.example" }).kind, "deny", pathname);
+		assert.equal(decide({ pathname }, { LH_ACCESS_TOKEN: "short" }).kind, "deny", pathname);
+	}
+	for (const pathname of ["/icon-512.png/", "/manifest.json", "/chat/icon-192.png", "/plugin-loader.js"]) assert.equal(decide({ pathname }).kind, "pair", pathname);
+});
+
 test("row 4: the pairing form may be posted without a cookie, from this origin only", () => {
 	const post = (over: Partial<AccessRequest>) => decide({ method: "POST", pathname: PAIR_PATH, origin: ORIGIN, ...over });
 	assert.deepEqual(post({}), { kind: "allow" });
@@ -192,6 +204,7 @@ test("proxy: unpaired API is 403 JSON, a paired request passes with security hea
 		assert.equal(stream.headers.get("cache-control"), null, "API routes keep their own cache policy");
 
 		assert(passedThrough(proxy(new NextRequest(`${ORIGIN}/api/health`, { headers: { host: HOST } }))));
+		assert(passedThrough(proxy(new NextRequest(`${ORIGIN}/manifest.webmanifest`, { headers: { host: HOST } }))));
 		const pairing = proxy(new NextRequest(ORIGIN + PAIR_PATH, { method: "POST", headers: { host: HOST, origin: ORIGIN } }));
 		assert(passedThrough(pairing), "the pairing form reaches its handler");
 	});

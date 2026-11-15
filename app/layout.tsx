@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { JetBrains_Mono, Source_Sans_3 } from "next/font/google";
 import { connection } from "next/server";
 import "katex/dist/katex.min.css";
@@ -20,7 +20,19 @@ const prose = Source_Sans_3({ subsets: ["latin"], variable: "--font-sans3" });
 export const metadata: Metadata = {
 	title: "Learning Harness",
 	description: "A teacher agent with a memory — sessions, quizzes, and a knowledge graph of what you know.",
+	// Added to an iPhone's home screen (docs/phone.md), the app opens without
+	// browser chrome and draws under the status bar.
+	appleWebApp: { title: "Mastery", statusBarStyle: "black-translucent" },
+	// Next writes the standard mobile-web-app-capable; iOS documents the
+	// status bar style as applying only with its own older name.
+	other: { "apple-mobile-web-app-capable": "yes" },
 };
+
+/** The browser's own chrome takes the active theme's background; `cover` extends the page under the notch and home indicator. */
+export async function generateViewport(): Promise<Viewport> {
+	await connection();
+	return { viewportFit: "cover", themeColor: readThemeBoot().vars["--background"] };
+}
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
 	// The theme is server-rendered — its class AND its color variables —
