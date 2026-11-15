@@ -19,7 +19,7 @@ The gate is off when `LH_ACCESS_TOKEN` is unset, and the server then behaves as 
 
 ## One rule
 
-**Never run the desktop app and the resident server at the same time.** They write the same files. The resident server checks at start and waits while the desktop app is open, but nothing stops you opening the desktop app while the server runs. Stop the server first (see [Going back to the desktop app](#going-back-to-the-desktop-app)).
+**Never run the desktop app and the resident server at the same time.** They write the same files. The resident server checks at start and waits while the desktop app is open, but nothing stops you opening the desktop app while the server runs. Open the desktop app only through the **MasteryHarness Desktop** launcher (see [Using the desktop app](#using-the-desktop-app)), which stops the server first.
 
 ## Set up once
 
@@ -69,6 +69,18 @@ All commands run from the repo root.
 
 6. **Pair the iPhone.** Install Tailscale on the phone and sign in to the same account. In Safari open `https://<mac>.<tailnet>.ts.net`, paste the token, then Share → Add to Home Screen. The home-screen app may ask for the token once more; it keeps its own cookies.
 
+7. **Install the desktop app and its launcher.** Package the server built in step 1 as an unsigned desktop app, copy it to `/Applications`, then build the launcher next to it:
+
+   ```sh
+   DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer LH_ADHOC_SIGN=1 \
+     npx electron-builder --mac --arm64 --dir --publish never \
+     -c.mac.identity=null -c.mac.notarize=false -c.directories.output=dist/local
+   ditto dist/local/mac-arm64/MasteryHarness.app /Applications/MasteryHarness.app
+   node scripts/resident-server/desktop-launcher.mjs install
+   ```
+
+   Put `/Applications/MasteryHarness Desktop.app` in the Dock instead of the desktop app itself. To update the desktop app later, quit it, delete `/Applications/MasteryHarness.app` and repeat this step: `ditto` onto an existing app merges the two.
+
 Model sign-ins made in the desktop app carry over: the server reads the same files. To sign in again, do it in the Mac's browser at `http://localhost:4747`, because ChatGPT's sign-in calls back to the server's own machine.
 
 ## After merging upstream
@@ -84,15 +96,19 @@ curl http://127.0.0.1:4747/api/health        # check the version
 
 Each release is about 250 MB and older ones are kept so you can roll back (re-point `current` and restart). Delete the ones you no longer want from `releases/`.
 
-## Going back to the desktop app
+## Using the desktop app
 
-```sh
-launchctl bootout gui/$(id -u)/com.masteryharness.server     # stop the server
-# … use the desktop app, then quit it …
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.masteryharness.server.plist
-```
+Open **MasteryHarness Desktop**, not MasteryHarness. The launcher:
 
-While the server is stopped the phone cannot connect. `node scripts/resident-server/launch-agent.mjs uninstall` removes the login item altogether.
+1. stops the resident server, and waits until it no longer answers;
+2. opens the desktop app, and waits until it holds the data;
+3. loads the server's login item again.
+
+The server then refuses to start every 30 seconds while the desktop app is open, and starts by itself within 30 seconds of quitting it. There is nothing to switch back.
+
+While the desktop app is open the phone cannot connect, and a lesson the phone was in the middle of is cut off. If the launcher shows an alert, the server is left stopped; the alert gives the command that starts it again.
+
+The launcher keeps its own copy of `scripts/resident-server/`. After those scripts change, run `node scripts/resident-server/desktop-launcher.mjs install` again. `node scripts/resident-server/launch-agent.mjs uninstall` removes the server's login item altogether.
 
 ## When something is wrong
 

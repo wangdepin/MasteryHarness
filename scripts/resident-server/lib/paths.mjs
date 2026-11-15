@@ -17,5 +17,9 @@ export const LOG_DIR = path.join(os.homedir(), "Library", "Logs", "MasteryHarnes
 /** The desktop app's profile: its data, its sign-ins and its single-instance lock. */
 export const DESKTOP_PROFILE_DIR = path.join(APPLICATION_SUPPORT, "MasteryHarness");
 export const LAUNCH_AGENT_FILE = path.join(os.homedir(), "Library", "LaunchAgents", `${LABEL}.plist`);
+/** The desktop app, where the launcher opens it. */
+export const DESKTOP_APP = "/Applications/MasteryHarness.app";
+/** The launcher that opens the desktop app in place of the server (desktop-launcher.mjs). */
+export const DESKTOP_LAUNCHER_APP = "/Applications/MasteryHarness Desktop.app";
 /** The scripts ride along inside each release, so the service never depends on the repo checkout. */
 export const SCRIPTS_IN_RELEASE = "resident-server";
