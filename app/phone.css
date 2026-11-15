@@ -76,6 +76,19 @@ aside[data-drawer] > div {
 		min-height: var(--lh-app-height, 100dvh);
 	}
 
+	/* Nothing too wide carries the whole app sideways under a finger: not
+	   the page, and not the lesson, whose overflow-y: hidden would otherwise
+	   leave it scrollable across. A table, a code block or a formula scrolls
+	   in its own box. */
+	html,
+	body {
+		overflow-x: clip;
+	}
+
+	[role="log"] {
+		overflow-x: hidden;
+	}
+
 	/* iOS zooms the page when a focused field's text is smaller than 16px,
 	   and does not zoom back. A field in the reader's own prose size keeps
 	   that size when it is larger. */
@@ -144,6 +157,82 @@ aside[data-drawer] > div {
 		gap: 0;
 		padding-inline: 0;
 		font-size: 0;
+	}
+
+	/* The row under the composer (components/stats-bar.tsx): usage,
+	   dictation, sources, model and thinking, and on the home page the
+	   teach | practice switch, in one line. Sources keeps its icon (the
+	   label stays in the markup as the button's name), the menus drop their
+	   ▾, and a long model name gives way to an ellipsis; its menu shows it
+	   in full. The dictation slot keeps room for its microphone. */
+	[data-testid="stats-bar"] {
+		gap: 0.5rem;
+		padding-inline: 0;
+	}
+
+	[data-testid="stats-bar"] > :has([data-testid="dictation-toggle"]) {
+		min-width: 1.75rem;
+	}
+
+	[data-testid="stats-materials"] {
+		gap: 0;
+		padding-inline: 0.5rem;
+	}
+
+	[data-testid="stats-materials"] > :last-child {
+		width: 0;
+		overflow: hidden;
+	}
+
+	:is([data-testid="model-control"], [data-testid="stats-model"]) {
+		min-width: 0;
+	}
+
+	[data-testid="stats-model"] > :first-child {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	:is([data-testid="stats-model"], [data-testid="stats-thinking"]) {
+		padding-inline: 0.5rem;
+	}
+
+	:is([data-testid="stats-model"], [data-testid="stats-thinking"]) > [aria-hidden] {
+		display: none;
+	}
+
+	[data-testid="home-mode-switch"] svg {
+		display: none;
+	}
+
+	[data-testid="home-mode-switch"] button {
+		padding-inline: 0.375rem;
+		letter-spacing: 0.025em;
+	}
+
+	/* Settings: the section list is a strip across the top that scrolls
+	   sideways, so a section gets the dialog's whole width. */
+	[data-testid="settings-dialog"] > :has(> [data-testid="settings-nav"]) {
+		flex-direction: column;
+	}
+
+	[data-testid="settings-nav"] {
+		width: auto;
+		flex-direction: row;
+		overflow-x: auto;
+		overflow-y: hidden;
+		border-right: 0;
+		border-bottom: 1px solid var(--border);
+	}
+
+	[data-testid="settings-nav"] hr {
+		display: none;
+	}
+
+	[data-testid="settings-nav"] button {
+		white-space: nowrap;
 	}
 
 	/* The docked side question: a sheet from the bottom, above the

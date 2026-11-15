@@ -47,6 +47,7 @@ import { BUNDLED_READING_FONTS, useAppearance } from "./appearance.tsx";
 import { FontMenuList } from "./model-menu";
 import { ThemeCards } from "./theme-cards.tsx";
 import { CommitInput, SettingsMenuTrigger, SettingsRow, Toggle } from "./controls.tsx";
+import { DeviceProseSizeRow } from "@/components/phone/device-prose-size-row";
 
 /** The factory reading family — the DEFAULT row's identity (unset =
  *  this). Exported for tests. */
@@ -403,6 +404,7 @@ export function AppearanceSection({
 					}}
 				/>
 			</SettingsRow>
+			<DeviceProseSizeRow sharedSize={resolved.proseFontSize} />
 			<SettingsRow label="Code ligatures" testid="row-code-ligatures">
 				<Toggle
 					checked={resolved.codeLigatures}

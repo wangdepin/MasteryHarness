@@ -41,6 +41,7 @@ import {
 	type Theme,
 	type ThemeColors,
 } from "@/src/core";
+import { useDeviceProseSize, withDeviceProseSize } from "@/components/phone/device-prose-size";
 
 /** The resolved, fully-concrete appearance view (delta + factory merged). */
 export function resolveAppearance(delta: AppearanceSettings | undefined) {
@@ -180,7 +181,13 @@ export function AppearanceProvider({
 	}, [mode, initialTheme.mode]);
 
 	// The vars apply on every change — stringified as the change signal.
-	const vars = useMemo(() => appearanceVars(appearance, activeTheme), [appearance, activeTheme]);
+	// A phone's own reading size (components/phone/device-prose-size.ts)
+	// takes the shared one's place.
+	const deviceProseSize = useDeviceProseSize();
+	const vars = useMemo(
+		() => withDeviceProseSize(appearanceVars(appearance, activeTheme), deviceProseSize),
+		[appearance, activeTheme, deviceProseSize],
+	);
 	// A refreshed server layout can rewrite <html>'s class/style while the
 	// mounted provider retains a newer local save. Reapply that live state
 	// when the server-rendered palette changes, even within the same mode.

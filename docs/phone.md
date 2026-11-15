@@ -110,6 +110,10 @@ While the desktop app is open the phone cannot connect, and a lesson the phone w
 
 The launcher keeps its own copy of `scripts/resident-server/`. After those scripts change, run `node scripts/resident-server/desktop-launcher.mjs install` again. `node scripts/resident-server/launch-agent.mjs uninstall` removes the server's login item altogether.
 
+## Reading size on the phone
+
+Settings → Appearance → Reading font size is shared: the phone and the Mac read it from the same settings file. On a touch screen a row under it, **This device**, sets a size for that phone alone (12–24 px). It is kept in the phone's browser storage, so the Mac is unaffected; leave it empty to follow the shared size. Pinch-zoom still works, but a zoomed page pans sideways until you zoom back out.
+
 ## When something is wrong
 
 | What you see | Cause and fix |

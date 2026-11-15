@@ -569,8 +569,9 @@ export const EXTRACTION_CHUNK_TOKENS_FLOOR = 500;
 
 // ─── Sanitizer ─────────────────────────────────────────────────────────────
 
-const PROSE_FONT_MIN = 12;
-const PROSE_FONT_MAX = 24;
+/** The reading font size's range, in whole px. */
+export const PROSE_FONT_MIN = 12;
+export const PROSE_FONT_MAX = 24;
 
 const clamp = (v: number, min: number, max: number) => Math.min(Math.max(v, min), max);
 
