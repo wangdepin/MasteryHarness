@@ -14,23 +14,6 @@
  * by components/phone/phone-viewport.tsx, on touch devices only.
  */
 
-/* ── Safe areas ──────────────────────────────────────────────────────────
-   The viewport covers the notch and the home indicator (viewport-fit:
-   cover in app/layout.tsx). Both insets are 0 where there is none, which
-   leaves these two rules without effect on a desktop. */
-
-/* The page's top bar: its 60px (h-15) plus the status bar. */
-.lh-safe-top {
-	height: calc(var(--spacing) * 15 + env(safe-area-inset-top, 0px));
-	padding-top: env(safe-area-inset-top, 0px);
-}
-
-/* The last row of a page. The keyboard covers the home indicator, so the
-   inset is dropped while it is up. */
-.lh-safe-bottom {
-	padding-bottom: max(0px, env(safe-area-inset-bottom, 0px) - var(--lh-keyboard-inset, 0px));
-}
-
 /* ── The sidebar as a drawer ─────────────────────────────────────────────
    Over the page instead of beside it. Closed is off-screen and hidden, so
    nothing in it can take focus. Open carries no transform: a transformed
@@ -65,10 +48,28 @@ aside[data-drawer] > div {
 
 /* ── Touch details ───────────────────────────────────────────────────── */
 @media (pointer: coarse) {
-	/* The page is as tall as what is visible, so the keyboard pushes the
-	   composer up instead of covering it. Every page shell is h-dvh. */
+	/* The viewport covers the status bar and the home indicator
+	   (viewport-fit: cover in app/layout.tsx). The keyboard covers the home
+	   indicator, so that inset is dropped while it is up. */
+	:root {
+		--lh-safe-top: env(safe-area-inset-top, 0px);
+		--lh-safe-bottom: max(0px, env(safe-area-inset-bottom, 0px) - var(--lh-keyboard-inset, 0px));
+	}
+
+	/* Every page shell is h-dvh, nested in the app's own h-dvh frame. The
+	   frame is as tall as what is visible, so the keyboard pushes the
+	   composer up instead of covering it, and it is padded by the two
+	   insets, so no page draws under the status bar or the home indicator:
+	   not a top bar, and not the floating buttons of the pages without one.
+	   The shells inside fill what is left. */
 	.h-dvh {
-		height: var(--lh-app-height, 100dvh);
+		height: calc(var(--lh-app-height, 100dvh) - var(--lh-safe-top) - var(--lh-safe-bottom));
+	}
+
+	.h-dvh:not(.h-dvh .h-dvh) {
+		box-sizing: content-box;
+		padding-top: var(--lh-safe-top);
+		padding-bottom: var(--lh-safe-bottom);
 	}
 
 	.min-h-dvh {
@@ -137,7 +138,7 @@ aside[data-drawer] > div {
 		border-left: 0;
 		border-top: 1px solid var(--border);
 		border-radius: 1rem 1rem 0 0;
-		padding-bottom: calc(0.75rem + max(0px, env(safe-area-inset-bottom, 0px) - var(--lh-keyboard-inset, 0px)));
+		padding-bottom: calc(0.75rem + var(--lh-safe-bottom, 0px));
 		box-shadow: 0 -0.5rem 2rem rgb(0 0 0 / 0.35);
 	}
 }
