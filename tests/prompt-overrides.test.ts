@@ -420,13 +420,13 @@ describe("Practice settings API and effective prompt loading", () => {
 			assert.deepEqual(view[kind], effectivePromptSegments(kind, readSettingsRecord()?.agent?.prompts ?? {}));
 		}
 		assert.deepEqual(view.practice.map((s: { path: string }) => s.path), [
-			"practice/00-base.md", "practice/10-doctrine.md",
+			"practice/00-base.md", "practice/10-doctrine.md", "practice/20-miss-attribution.md",
 			"shared/10-voice.md", "shared/15-accuracy.md", "shared/16-mental-model.md", "shared/35-side-conversations.md", "shared/40-formatting.md",
 		]);
 		assert.ok(!view.practice.some((s: { path: string }) => s.path === "system-prompt.md"));
 	});
 
-	for (const segment of ["practice/00-base.md", "practice/10-doctrine.md"]) {
+	for (const segment of ["practice/00-base.md", "practice/10-doctrine.md", "practice/20-miss-attribution.md"]) {
 		it(`${segment}: save, enable, disable, re-enable and delete recover defaults without changing other agents`, async () => {
 			const defaults = Object.fromEntries((["teacher", "prober", "practice"] as const).map((kind) => [kind, teacherAgent.composeInstructions(kind)]));
 			const text = `SYNTHETIC PRACTICE OVERRIDE ${segment}`;

@@ -1468,6 +1468,25 @@ describe("prompt composition", () => {
 		assert.ok(!prober.includes("Question principles"), "the teach-phase fragment never composes into the prober");
 	});
 
+	it("miss attribution composes into the teacher and practice prompts, never the prober", () => {
+		const teacherHeading = "## Say why a check missed";
+		const practiceHeading = "## After the problem: name a structural miss";
+		const teacher = composeInstructions("teacher");
+		assert.ok(
+			teacher.indexOf(teacherHeading) > teacher.indexOf("# Teach — one step at a time"),
+			"the teacher's attribution rule sits after the teaching loop",
+		);
+		assert.ok(!teacher.includes(practiceHeading), "the practice rule stays out of the teacher");
+		const practice = composeInstructions("practice");
+		assert.ok(
+			practice.indexOf(practiceHeading) > practice.indexOf("# The practice session"),
+			"the practice attribution rule sits after the doctrine",
+		);
+		assert.ok(!practice.includes(teacherHeading), "the teacher rule stays out of practice");
+		const prober = composeInstructions("prober");
+		assert.ok(!prober.includes(teacherHeading) && !prober.includes(practiceHeading), "the prober attributes nothing");
+	});
+
 	it("the predict-check cycle composes into the teacher; the craft chunk reaches BOTH agents (owner 2026-10-03)", () => {
 		const teacher = composeInstructions("teacher");
 		// the cycle doctrine (28-predictions.md) — teacher-only

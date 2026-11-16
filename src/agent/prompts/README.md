@@ -17,6 +17,8 @@ The side-question base is not an editable segment (it is not listed in Settings)
 
 Practice has its own base and doctrine. Its shared appendix is explicitly allowlisted in the loader: `10-voice.md`, `15-accuracy.md`, `16-mental-model.md`, `35-side-conversations.md` and `40-formatting.md`, in sorted order. Other shared fragments do **not** automatically enter practice. Adding a new shared fragment includes it in prober/teacher composition, but not practice unless the allowlist changes.
 
+`teacher/22-miss-attribution.md` and `practice/20-miss-attribution.md` are this fork's additions. They are separate files, not edits to `20-teaching.md` and `10-doctrine.md`, so that merges from upstream do not conflict.
+
 ## Overrides and defaults
 
 Source files are the default instructions. User override files mirror segment keys under [`PROMPTS_OVERRIDE_DIR`](../../../config.ts), normally `data/prompts/` (relocated by `LH_DATA_DIR`):

@@ -95,3 +95,12 @@ Criteria the theory establishes for the system (not the spec — the spec follow
 4. **The plan tree's resolution must not leak into the lesson.** Plan nodes are structural landmarks, not lesson segments. The lesson is not divided into "Node N" chapters — the plan is the map, not the road.
 5. **Delivery is efficient by default.** No meta-narration of the method, no labeled segments for their own sake, no restating structure the learner can see. Explicitness only where it serves absorption (Section 8).
 6. **The system owns the logistics.** Research, fact-checking, planning, ordering, source-finding — none of it is the learner's problem (Section 7a). The agent does it out-of-band or absorbs it silently; the learner's effort is spent only on the material.
+7. **A miss is attributed out loud.** The teacher states which of the three causes a missed check had before repairing it. Practice names a structural miss only after the problem is concluded (Section 11).
+
+## 11. Attribution — a miss is located out loud
+
+*(Fork addition, 2026-11-16. After "You Are NOT Dumb, You Just Lack the Prerequisites", lelouch.dev.)*
+
+Section 5 says a failed step is precisely localized. That localization is knowledge the learner needs too. A learner who is not told why a check missed supplies a cause of their own, and the default cause is a judgment of themselves. That judgment is false under this theory: a miss means a step did not land, a prerequisite is not held, or a slip occurred. All three are facts about the structure, and each has a specific repair.
+
+So the location is stated: which of the three it was, and which proposition or point it concerns. It is a statement of fact, not consolation, and it says nothing about ability.
