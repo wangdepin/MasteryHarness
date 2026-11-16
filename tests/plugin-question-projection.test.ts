@@ -6,7 +6,7 @@ import { pendingPluginQuestionOf, pluginQuestionCallsOf, pluginQuestionResultMat
 import { inputAppends, dismissAppends, parseChatInput, parseDismissInput, questionRecoveryAppends } from "../src/core/input-events.ts";
 import { projectView } from "../src/core/view.ts";
 import { phaseAt3, phaseAt3Lh, teachStepIndex } from "../src/core/phases.ts";
-import { derivePlanStatuses, derivePlanStatusesLh } from "../src/core/contracts/plan.ts";
+import { derivePlanStatuses, derivePlanStatusesLh, firstPlanNodeCalls } from "../src/core/contracts/plan.ts";
 import { sessionMarkdown } from "../src/core/session-markdown.ts";
 import type { PluginQuestionSnapshot, PluginQuestionAnswer, PluginQuestionOccurrence, JsonValue } from "../src/core/plugin-questions.ts";
 
@@ -191,6 +191,8 @@ test("metadata-based teach phase and node positioning ignore failed attempts and
 	assert.equal(phaseAt3(projectView(messages)), "teach");
 	assert.equal(derivePlanStatusesLh(tree, messages).current, "n1");
 	assert.equal(derivePlanStatuses(tree, projectView(messages)).current, "n1");
+	assert.deepEqual([...firstPlanNodeCalls(tree, projectView(messages))], [["n1", { messageId: "teach", toolCallId: "call_0" }]]);
+	assert.equal(firstPlanNodeCalls(tree, projectView([assistant("probe", "call_0", false)])).size, 0, "a probe question locates no node");
 	const part = projectView([teach])[0]!.parts.find(p => p.pluginQuestion)!;
 	assert.equal(teachStepIndex([{ type: "step-start" }, { type: "text" }, { type: "step-start" }, part]), 2);
 	teach.lhQuestions = { "1": { protocolVersion: 1, pluginId: "fixture", typeId: "code", label: "Code", variant: "teach" } };
@@ -198,6 +200,7 @@ test("metadata-based teach phase and node positioning ignore failed attempts and
 	assert.equal(phaseAt3(projectView(messages)), "plan");
 	assert.equal(derivePlanStatusesLh(tree, messages).current, null);
 	assert.equal(derivePlanStatuses(tree, projectView(messages)).current, null);
+	assert.equal(firstPlanNodeCalls(tree, projectView(messages)).size, 0);
 });
 
 test("session Markdown preserves historical string content alongside plugin questions", () => {

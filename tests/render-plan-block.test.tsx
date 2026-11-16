@@ -188,6 +188,9 @@ describe("plan block render", () => {
 		assert.match(html, /data-testid="plan-node-a" data-status="visited"/);
 		assert.match(html, /data-testid="plan-node-b" data-status="upcoming"/);
 		assert.ok(html.includes('aria-label="Open the full plan"'), "the trigger names itself (tooltip copy)");
+		// The block is ONE button onto the popup: its nodes never open anything.
+		assert.doesNotMatch(html, /data-plan-node-id/);
+		assert.match(html, /<svg[^>]*role="img"/);
 	});
 
 });
@@ -226,8 +229,24 @@ describe("plan popup (live derivation)", () => {
 		];
 	}
 
+	it("covered nodes are buttons onto the transcript; upcoming nodes stay inert", () => {
+		const html = renderToStaticMarkup(<PlanPopup messages={messages()} onClose={() => {}} onOpenNode={() => {}} />);
+		const nodeTag = (id: string) => html.match(new RegExp(`<g[^>]*data-testid="plan-node-${id}"[^>]*>`))?.[0] ?? "";
+		for (const id of ["a", "b"]) {
+			assert.match(nodeTag(id), new RegExp(`data-plan-node-id="${id}"`), `${id} carries its id`);
+			assert.match(nodeTag(id), /role="button"/);
+			assert.match(nodeTag(id), /tabindex="0"/);
+			assert.match(nodeTag(id), /class="cursor-pointer"/);
+		}
+		assert.match(nodeTag("a"), /aria-label="Jump to [^"]+ in the session"/);
+		assert.doesNotMatch(nodeTag("c"), /data-plan-node-id|role="button"|tabindex/);
+		// Buttons inside an image would be hidden from assistive tech.
+		assert.match(html, /<svg[^>]*role="group"/);
+		assert.match(html, /Click a visited node to jump there/);
+	});
+
 	it("derives statuses at click time: latest tagged call → current, earlier → visited (glowing)", () => {
-		const html = renderToStaticMarkup(<PlanPopup messages={messages()} onClose={() => {}} />);
+		const html = renderToStaticMarkup(<PlanPopup messages={messages()} onClose={() => {}} onOpenNode={() => {}} />);
 		assert.match(html, /data-testid="plan-popup"/);
 		assert.match(html, /data-testid="plan-node-a" data-status="visited"/);
 		assert.match(html, /data-testid="plan-node-b" data-status="current"/);
@@ -270,7 +289,7 @@ describe("plan popup (live derivation)", () => {
 			{ parts: [{ type: "tool-quiz", state: "output-available", input: { nodeId: "y" }, output: { correct: true } }] },
 			{ parts: [{ type: "tool-quiz", state: "output-available", input: { nodeId: "z" }, output: { correct: true } }] },
 		];
-		const html = renderToStaticMarkup(<PlanPopup messages={msgs} onClose={() => {}} />);
+		const html = renderToStaticMarkup(<PlanPopup messages={msgs} onClose={() => {}} onOpenNode={() => {}} />);
 		assert.match(html, /data-testid="plan-node-x" data-status="upcoming"/);
 		assert.match(html, /data-testid="plan-node-y" data-status="visited"/);
 		assert.match(html, /data-testid="plan-node-z" data-status="current"/);
@@ -286,7 +305,7 @@ describe("plan popup (live derivation)", () => {
 	});
 
 	it("renders the empty state when the session has no plan", () => {
-		const html = renderToStaticMarkup(<PlanPopup messages={[{ parts: [] }]} onClose={() => {}} />);
+		const html = renderToStaticMarkup(<PlanPopup messages={[{ parts: [] }]} onClose={() => {}} onOpenNode={() => {}} />);
 		assert.match(html, /No plan in this session yet\./);
 	});
 });

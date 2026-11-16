@@ -12,7 +12,7 @@ import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { after, describe, it } from "node:test";
-import { derivePlanStatuses, derivedNodeStatus, type PlanTree, type PlanToolResult } from "../src/core/contracts.ts";
+import { derivePlanStatuses, derivedNodeStatus, firstPlanNodeCalls, type PlanTree, type PlanToolResult } from "../src/core/contracts.ts";
 import { createTree, emptyTree, PlanTreeError } from "../src/core/plan-tree.ts";
 import { planTools } from "../src/agent/tools/plan.ts";
 import { parseMermaidPlan } from "../src/agent/tools/mermaid-plan.ts";
@@ -406,6 +406,78 @@ describe("derivePlanStatuses (the map tracks position, not completion)", () => {
 		assert.equal(derivedNodeStatus(later, "b"), "current");
 		assert.equal(derivedNodeStatus(later, "c"), "upcoming");
 	});
+});
+
+// ─── first appearance: where the plan popup's node click lands ────────────────
+
+describe("firstPlanNodeCalls (each node's first tagged call)", () => {
+	const tree: PlanTree = {
+		nodes: [
+			{ id: "a", title: "A" },
+			{ id: "b", title: "B" },
+			{ id: "c", title: "C" },
+		],
+		edges: [],
+		version: 1,
+	};
+	type Call = { tool?: string; nodeId?: string; messageId?: string; callId?: string };
+	const part = (c: Call) => ({
+		type: `tool-${c.tool ?? "quiz"}`,
+		state: "output-available",
+		input: c.nodeId === undefined ? {} : { nodeId: c.nodeId },
+		sourceMessageId: c.messageId,
+		toolCallId: c.callId,
+	});
+	const at = (messageId: string, callId: string) => ({ messageId, toolCallId: callId });
+
+	const cases: Array<{ name: string; calls: Call[]; want: Array<[string, ReturnType<typeof at>]> }> = [
+		{ name: "no tagged calls locate nothing", calls: [], want: [] },
+		{
+			name: "a revisit (a→b→a) keeps a at its first stay",
+			calls: [
+				{ nodeId: "a", messageId: "m1", callId: "c1" },
+				{ nodeId: "b", messageId: "m2", callId: "c2" },
+				{ nodeId: "a", messageId: "m3", callId: "c3" },
+			],
+			want: [["a", at("m1", "c1")], ["b", at("m2", "c2")]],
+		},
+		{
+			name: "several questions on one node keep the first",
+			calls: [
+				{ nodeId: "a", messageId: "m1", callId: "c1" },
+				{ nodeId: "a", messageId: "m2", callId: "c2" },
+			],
+			want: [["a", at("m1", "c1")]],
+		},
+		{
+			name: "explain calls locate a node like quiz calls",
+			calls: [{ tool: "explain", nodeId: "b", messageId: "m1", callId: "c1" }],
+			want: [["b", at("m1", "c1")]],
+		},
+		{
+			name: "unknown, untagged and non-question calls are ignored",
+			calls: [
+				{ nodeId: "gone", messageId: "m1", callId: "c1" },
+				{ messageId: "m2", callId: "c2" },
+				{ tool: "probe", nodeId: "a", messageId: "m3", callId: "c3" },
+			],
+			want: [],
+		},
+		{
+			name: "a call without a source position yields to the next one that has it",
+			calls: [
+				{ nodeId: "a" },
+				{ nodeId: "a", messageId: "m2", callId: "c2" },
+			],
+			want: [["a", at("m2", "c2")]],
+		},
+	];
+	for (const c of cases) {
+		it(c.name, () => {
+			const messages = c.calls.map((call) => ({ parts: [part(call)] }));
+			assert.deepEqual([...firstPlanNodeCalls(tree, messages)], c.want);
+		});
+	}
 });
 
 // ─── the explain mechanic derives position identically (owner 2026-09-27) ──

@@ -7,6 +7,12 @@ export function messageAnchorId(messageId: string): string {
 	return `message-${messageId}`;
 }
 
+/** DOM anchor of one rendered question record — where a plan-node jump lands
+ * when the call's teacher message carries no prose. */
+export function questionAnchorId(toolCallId: string): string {
+	return `question-${toolCallId}`;
+}
+
 export function messageIdFromHash(hash: string): string | null {
 	try {
 		const anchor = decodeURIComponent(hash.replace(/^#/, ""));

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
-	firstSourceTextParts, messageAnchorId, messageIdFromHash, propositionSessionHref, textPartMessageId,
+	firstSourceTextParts, messageAnchorId, messageIdFromHash, propositionSessionHref, questionAnchorId, textPartMessageId,
 } from "../src/core/session-navigation.ts";
 import { projectView } from "../src/core/view.ts";
 import type { LhMessage } from "../src/core/native-messages.ts";
@@ -36,6 +36,7 @@ describe("proposition source-session links (owner, 2026-10-13)", () => {
 
 	it("recognizes only non-empty, well-formed message hashes", () => {
 		assert.equal(messageAnchorId("msg_a"), "message-msg_a");
+		assert.equal(questionAnchorId("call_a"), "question-call_a");
 		assert.equal(messageIdFromHash("#message-msg_a"), "msg_a");
 		for (const hash of ["", "#", "#message-", "#other-msg_a", "#message-%ZZ"]) {
 			assert.equal(messageIdFromHash(hash), null, hash);

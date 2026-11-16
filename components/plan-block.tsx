@@ -466,6 +466,25 @@ const TEXT: Record<PlanNodeStatus, string> = {
 const MONO_BOX = "fill-card stroke-line-strong";
 const MONO_TEXT = "fill-foreground text-xs";
 
+/** What turns a node's group into a keyboard-reachable button. The pointer
+ *  side lives in the popup's viewport handlers (PLAN_NODE_ID_ATTR is how they
+ *  find the node): pan capture would swallow a click handler here. */
+const PLAN_NODE_ID_ATTR = "data-plan-node-id";
+function nodeOpenProps(node: { id: string; title: string }, onNodeOpen: (nodeId: string) => void) {
+	return {
+		[PLAN_NODE_ID_ATTR]: node.id,
+		role: "button",
+		tabIndex: 0,
+		"aria-label": `Jump to ${node.title} in the session`,
+		className: "cursor-pointer",
+		onKeyDown: (e: React.KeyboardEvent<SVGGElement>) => {
+			if (e.key !== "Enter" && e.key !== " ") return;
+			e.preventDefault();
+			onNodeOpen(node.id);
+		},
+	};
+}
+
 /** The diagram itself: positioned nodes + bezier edges. Pure-ish render —
  *  every input is data, so SSR render tests pin the whole thing. The root
  *  sets font-family var(--font-prose): node titles render in the READING
@@ -484,6 +503,7 @@ export function PlanDiagram({
 	naturalSize,
 	monochrome,
 	fill,
+	onNodeOpen,
 }: {
 	nodes: readonly LayoutNode[];
 	edges: ReadonlyArray<{ from: string; to: string }>;
@@ -510,6 +530,10 @@ export function PlanDiagram({
 	 *  dock band's marginalia mode, where the diagram must fit BOTH the
 	 *  flank's width and the band's height rather than run width-first. */
 	fill?: boolean;
+	/** Makes every covered node (visited or current) a button that opens it;
+	 *  upcoming nodes have no place in the transcript and stay inert. Never
+	 *  applies to the monochrome block. */
+	onNodeOpen?: (nodeId: string) => void;
 }) {
 	const layout = useMemo(() => blockLayout(nodes, edges), [nodes, edges]);
 	// Pad only the full-extent render — the plan window's override viewBox is
@@ -538,7 +562,7 @@ export function PlanDiagram({
 						? { width: `${vbW}px` }
 						: {}),
 			}}
-			role="img"
+			role={onNodeOpen ? "group" : "img"}
 			aria-label="Plan diagram"
 		>
 			<defs>
@@ -624,6 +648,7 @@ export function PlanDiagram({
 						transform={`translate(${layout.x.get(n.id) ?? 0}, ${layout.y.get(n.id) ?? 0})`}
 						data-testid={`plan-node-${n.id}`}
 						data-status={status}
+						{...(onNodeOpen && !monochrome && status !== "upcoming" ? nodeOpenProps(n, onNodeOpen) : {})}
 					>
 						{/* Rectangular — no corner rounding (owner). */}
 						<rect
@@ -730,6 +755,9 @@ export function latestTree(messages: readonly PopupMessage[]): PlanTree | null {
  *  the in-chat block (monochrome, no glow) stays tight at GRAPH_PAD. */
 const POPUP_PAD = GLOW_REACH;
 
+/** Pointer travel below this is a click, not a pan. */
+const CLICK_SLOP_PX = 4;
+
 // The pan/zoom math now lives in components/pan-zoom.ts (shared with the
 // mermaid focus overlay since the session-overlay wave, 2026-09-19) — same
 // fit-floor semantics: fully zoomed out IS the fit, panning locks at the
@@ -747,7 +775,16 @@ const POPUP_PAD = GLOW_REACH;
  * territory. Surface 80% + blur (owner decision): the transcript ghosts
  * through while the focus owns the session area.
  */
-export function PlanPopup({ messages, onClose }: { messages: readonly PopupMessage[]; onClose: () => void }) {
+export function PlanPopup({
+	messages,
+	onClose,
+	onOpenNode,
+}: {
+	messages: readonly PopupMessage[];
+	onClose: () => void;
+	/** A covered node was clicked (or activated by keyboard). */
+	onOpenNode: (nodeId: string) => void;
+}) {
 	const tree = useMemo(() => latestTree(messages), [messages]);
 	const statuses = useMemo(
 		() => (tree ? derivePlanStatuses(tree, messages as Parameters<typeof derivePlanStatuses>[1]) : null),
@@ -826,9 +863,18 @@ export function PlanPopup({ messages, onClose }: { messages: readonly PopupMessa
 	// per-frame — the transition is off while dragging or it rubber-bands.
 	const [panning, setPanning] = useState(false);
 	const dragRef = useRef<{ px: number; py: number; x: number; y: number; moved: boolean } | null>(null);
+	// A press that ends within CLICK_SLOP_PX of where it began is a click on
+	// the node under it; anything longer is a pan and opens nothing.
+	const pressRef = useRef<{ px: number; py: number; nodeId: string | null } | null>(null);
 	const startDrag = (e: React.PointerEvent<HTMLDivElement>) => {
 		if (e.button !== 0) return;
-		if ((e.target as HTMLElement).closest("button")) return;
+		const target = e.target as Element;
+		if (target.closest("button")) return;
+		pressRef.current = {
+			px: e.clientX,
+			py: e.clientY,
+			nodeId: target.closest(`[${PLAN_NODE_ID_ATTR}]`)?.getAttribute(PLAN_NODE_ID_ATTR) ?? null,
+		};
 		if (atFloor) return;
 		dragRef.current = { px: e.clientX, py: e.clientY, x: view.x, y: view.y, moved: false };
 		setPanning(true);
@@ -838,6 +884,7 @@ export function PlanPopup({ messages, onClose }: { messages: readonly PopupMessa
 	const moveDrag = (e: React.PointerEvent<HTMLDivElement>) => {
 		const d = dragRef.current;
 		if (!d) return;
+		if (!d.moved && Math.hypot(e.clientX - d.px, e.clientY - d.py) < CLICK_SLOP_PX) return;
 		d.moved = true;
 		setView((v) =>
 			v.zoom <= fitZoom + 1e-9 ? v : { ...v, x: d.x + (e.clientX - d.px), y: d.y + (e.clientY - d.py) },
@@ -851,6 +898,10 @@ export function PlanPopup({ messages, onClose }: { messages: readonly PopupMessa
 		}
 		setPanning(false);
 		e.currentTarget.classList.remove("cursor-grabbing");
+		const press = pressRef.current;
+		pressRef.current = null;
+		if (e.type !== "pointerup" || !press?.nodeId) return;
+		if (Math.hypot(e.clientX - press.px, e.clientY - press.py) < CLICK_SLOP_PX) onOpenNode(press.nodeId);
 	};
 	const stepZoom = (factor: number) => {
 		userAdjustedRef.current = true;
@@ -933,10 +984,11 @@ export function PlanPopup({ messages, onClose }: { messages: readonly PopupMessa
 								markerId={markerId}
 								pad={POPUP_PAD}
 								naturalSize
+								onNodeOpen={onOpenNode}
 							/>
 						</div>
 						<div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between p-2">
-							<span className="text-xs text-muted-foreground/60">Drag to pan · scroll to zoom</span>
+							<span className="text-xs text-muted-foreground/60">Click a visited node to jump there · drag to pan · scroll to zoom</span>
 							<div className="flex gap-1">
 								<Hint label="Zoom out" side="bottom">
 <button

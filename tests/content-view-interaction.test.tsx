@@ -58,7 +58,7 @@ for (const kind of ["chains", "diagram", "plan"] as const) {
 		let closes = 0;
 		const close = () => { closes++; };
 		await mount(kind === "chains" ? <ChainTableOverlay open nodes={[]} chains={[]} sessions={{}} fileSources={{}} onClose={close} />
-			: kind === "diagram" ? <MermaidOverlay svg={svg} onClose={close} /> : <PlanPopup messages={[]} onClose={close} />);
+			: kind === "diagram" ? <MermaidOverlay svg={svg} onClose={close} /> : <PlanPopup messages={[]} onClose={close} onOpenNode={() => {}} />);
 		const layer = controller.getTopLayer()!;
 		assert.equal(layer.kind, "view"); assert.equal(controller.getActiveModal(), null);
 		const frame = layer.rootRef.current!;
@@ -78,7 +78,7 @@ for (const kind of ["chains", "diagram", "plan"] as const) {
 
 it("a child popup owns one Escape; a refusing child consumes it without closing the content view", async () => {
 	let closes = 0, popupCloses = 0;
-	await mount(<PlanPopup messages={[]} onClose={() => { closes++; }} />);
+	await mount(<PlanPopup messages={[]} onClose={() => { closes++; }} onOpenNode={() => {}} />);
 	const view = controller.getTopLayer()!;
 	const popup = document.createElement("div"); document.body.append(popup);
 	let unregister = () => {};

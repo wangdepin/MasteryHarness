@@ -1,5 +1,5 @@
 import { messageAnchorId, type TutorCitation } from "@/src/core";
-import { scrollSessionTarget, type SessionScrollContext } from "./session-navigation";
+import { revealSessionElement, scrollSessionTarget, type SessionScrollContext } from "./session-navigation";
 import { resolveCitationRange, sourceElements } from "./selection-text";
 
 /**
@@ -94,9 +94,7 @@ export function revealCitationSource({ transcript, scroll, citation, currentChat
 		scrollSessionTarget(range!, transcript, scroll);
 		pulse(range!, window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false);
 	} else if (plan === "message" && transcript && message instanceof HTMLElement) {
-		scrollSessionTarget(message, transcript, scroll);
-		message.classList.add("lh-source-highlight");
-		window.setTimeout(() => message.classList.remove("lh-source-highlight"), 2_000);
+		revealSessionElement(message, transcript, scroll);
 	}
 	return plan;
 }

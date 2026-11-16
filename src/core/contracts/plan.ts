@@ -62,7 +62,30 @@ export type PlanNodeStatus = "current" | "visited" | "upcoming";
 /** Minimal structural message slice — anything with typed parts (mirrors
  * phases.ts: pure, no runtime deps, safe on server, client, and in tests). */
 interface PartsCarrier {
-	parts: Array<{ type: string; state?: string; input?: unknown; output?: unknown; pluginQuestion?: unknown }>;
+	parts: Array<{
+		type: string;
+		state?: string;
+		input?: unknown;
+		output?: unknown;
+		pluginQuestion?: unknown;
+		sourceMessageId?: string;
+		toolCallId?: string;
+	}>;
+}
+
+/** One nodeId-tagged teach question call, in transcript order. */
+interface TaggedPlanCall {
+	nodeId: string;
+	sourceMessageId?: string;
+	toolCallId?: string;
+}
+
+/** Where a plan node's FIRST tagged call sits in the transcript — the jump
+ *  target of the plan popup's node click. */
+export interface PlanNodeCall {
+	/** Native id of the teacher message carrying the call. */
+	messageId: string;
+	toolCallId: string;
 }
 
 export interface DerivedPlanStatuses {
@@ -88,10 +111,9 @@ export function derivedNodeStatus(statuses: DerivedPlanStatuses, nodeId: string)
 	return "upcoming";
 }
 
-export function derivePlanStatuses(tree: PlanTree, messages: readonly PartsCarrier[]): DerivedPlanStatuses {
+/** Every tagged teach question call whose node is in the current tree. */
+function* taggedPlanCalls(tree: PlanTree, messages: readonly PartsCarrier[]): Generator<TaggedPlanCall> {
 	const ids = new Set(tree.nodes.map((n) => n.id));
-	const runs: string[] = []; // distinct tagged nodes in call order, CONSECUTIVE
-	// duplicates collapsed (several checks on one node = one stay on it)
 	for (const m of messages) {
 		for (const part of m.parts) {
 			// Either quizzing tool (quiz/explain) tags position — the mechanic
@@ -100,8 +122,27 @@ export function derivePlanStatuses(tree: PlanTree, messages: readonly PartsCarri
 			if (part.pluginQuestion !== undefined ? snapshot?.variant !== "teach" : part.type !== "tool-quiz" && part.type !== "tool-explain") continue;
 			const nodeId = ((snapshot?.input ?? part.input) as { nodeId?: unknown } | undefined)?.nodeId;
 			if (typeof nodeId !== "string" || !ids.has(nodeId)) continue; // untagged/unknown — moves nothing
-			if (runs.at(-1) !== nodeId) runs.push(nodeId);
+			yield { nodeId, sourceMessageId: part.sourceMessageId, toolCallId: part.toolCallId };
 		}
+	}
+}
+
+/** Each node's FIRST tagged call: a revisit (a→b→a) still points a at its
+ *  first stay. Calls without a source position locate nothing. */
+export function firstPlanNodeCalls(tree: PlanTree, messages: readonly PartsCarrier[]): Map<string, PlanNodeCall> {
+	const first = new Map<string, PlanNodeCall>();
+	for (const call of taggedPlanCalls(tree, messages)) {
+		if (first.has(call.nodeId) || !call.sourceMessageId || !call.toolCallId) continue;
+		first.set(call.nodeId, { messageId: call.sourceMessageId, toolCallId: call.toolCallId });
+	}
+	return first;
+}
+
+export function derivePlanStatuses(tree: PlanTree, messages: readonly PartsCarrier[]): DerivedPlanStatuses {
+	const runs: string[] = []; // distinct tagged nodes in call order, CONSECUTIVE
+	// duplicates collapsed (several checks on one node = one stay on it)
+	for (const call of taggedPlanCalls(tree, messages)) {
+		if (runs.at(-1) !== call.nodeId) runs.push(call.nodeId);
 	}
 	const current = runs.at(-1) ?? null;
 	// Visited = been there in an EARLIER stay: everything before the current

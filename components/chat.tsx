@@ -57,6 +57,8 @@ import {
 	cliContextWindowOf,
 	latestReadablePassage,
 	messageAnchorId,
+	questionAnchorId,
+	firstPlanNodeCalls,
 	sideEntryPoints,
 	sideSegmentId,
 	textPartMessageId,
@@ -71,7 +73,7 @@ import { PlanMarginalia, planExists } from "@/components/plan-window";
 import { MermaidOverlay, SessionMermaidContext, type SessionImage } from "@/components/session-overlay";
 import { AbortTurnDialog, type AbortMode } from "@/components/abort-turn-dialog";
 import { ArrowRightIcon, DumbbellIcon, MessageCircleQuestionIcon, WaypointsIcon } from "lucide-react";
-import type { PlanBlockData } from "@/src/core";
+import type { PlanBlockData, PlanNodeCall } from "@/src/core";
 import { QuestionDock } from "@/components/question-dock";
 import { PluginQuestionDock } from "./plugin-question-dock";
 import { PluginQuestionPart } from "./plugin-question-part";
@@ -81,7 +83,7 @@ import { pendingPluginQuestionOf, pluginQuestionCallsOf } from "@/src/core";
 import { pluginQuestionOccurrenceKey, type PluginQuestionSnapshot } from "@/src/core";
 import type { PluginQuestionDraft } from "./session-core";
 import { SessionFind, sessionFindHasForegroundLayer } from "@/components/session-find";
-import { scrollSessionToBottom, scrollSessionToTop, SessionMessageNavigation } from "@/components/session-navigation";
+import { revealSessionElement, scrollSessionToBottom, scrollSessionToTop, SessionMessageNavigation } from "@/components/session-navigation";
 import { SelectionToolbar } from "@/components/selection-toolbar";
 import { createCiteAction, type CitationEditTarget } from "@/components/citation-actions";
 import { CitationActionsContext, type CitationActions } from "@/components/citation-chip";
@@ -1319,6 +1321,24 @@ export function Chat({
 	// The session's live plan (drives the top-bar chip; the marginalia
 	// derives its own from the same transcript).
 	const planTree = useMemo(() => latestTree(messages), [messages]);
+	// Where each covered node first appears — the plan popup's jump targets.
+	const planNodeCalls = useMemo(
+		() => (planTree ? firstPlanNodeCalls(planTree, messages) : new Map<string, PlanNodeCall>()),
+		[planTree, messages],
+	);
+	/** A node click in the plan popup: close it and land on the teacher
+	 *  message that first asked about the node — its prose anchor, or the
+	 *  question record itself when that message carries no prose. */
+	const jumpToPlanNode = (nodeId: string) => {
+		const call = planNodeCalls.get(nodeId);
+		if (!call) return;
+		setPlanOpen(false);
+		const target =
+			document.getElementById(messageAnchorId(call.messageId)) ??
+			document.getElementById(questionAnchorId(call.toolCallId));
+		if (!target || !transcriptElement) return;
+		revealSessionElement(target, transcriptElement, scrollContextRef.current);
+	};
 
 	// ── Session usage (wave-4 stats bar) ──
 	// The money channel: the record's turns log and read-time server Pi
@@ -1928,7 +1948,7 @@ export function Chat({
 									<MessageContent className="w-full">
 											{m.parts.map((part, pi) => {
 												if (part.pluginProblem) return <ProblemCard key={pi} part={{ ...part, state: part.state ?? "input-available", toolCallId: part.toolCallId ?? "" }} />;
-												if (part.pluginQuestion) return <PluginQuestionPart key={pi} part={part} chatId={chatId} />;
+												if (part.pluginQuestion) return <div key={pi} id={part.toolCallId ? questionAnchorId(part.toolCallId) : undefined} className="flex flex-col gap-2"><PluginQuestionPart part={part} chatId={chatId} /></div>;
 												const isLastPart = mi === messages.length - 1 && pi === m.parts.length - 1;
 												// The step boundary where teaching begins (round 8): when
 												// the teach flip happens in a LATER step, its PhaseDivider
@@ -2008,7 +2028,9 @@ export function Chat({
 														// transcript; answered ones render as graded records.
 														if (part.state === "output-available") {
 															return (
-																<AnsweredCard key={pi} answer={part.output as QuestionAnswerData} input={part.input} />
+																<div key={pi} id={part.toolCallId ? questionAnchorId(part.toolCallId) : undefined}>
+																<AnsweredCard answer={part.output as QuestionAnswerData} input={part.input} />
+															</div>
 															);
 														}
 														return null;
@@ -2256,7 +2278,7 @@ export function Chat({
 						onClose={() => setFigureFocus(null)}
 					/>
 				)}
-				{planOpen && <PlanPopup messages={messages} onClose={() => setPlanOpen(false)} />}
+				{planOpen && <PlanPopup messages={messages} onClose={() => setPlanOpen(false)} onOpenNode={jumpToPlanNode} />}
 				<SelectionToolbar viewport={transcriptElement} actions={selectionActions} />
 				{citationEdit && (
 					<CitationCommentPopover

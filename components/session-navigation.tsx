@@ -40,6 +40,15 @@ export function scrollSessionTarget(target: Range | HTMLElement, scope: HTMLElem
 	}
 }
 
+const SOURCE_HIGHLIGHT_MS = 2_000;
+
+/** Bring one transcript element into view and spotlight it briefly. */
+export function revealSessionElement(target: HTMLElement, scope: HTMLElement, context: SessionScrollContext | null): void {
+	scrollSessionTarget(target, scope, context);
+	target.classList.add("lh-source-highlight");
+	window.setTimeout(() => target.classList.remove("lh-source-highlight"), SOURCE_HIGHLIGHT_MS);
+}
+
 /** React owns message markup; this controller adds no messages or content.
  * Arrival on a full load is the browser's own hash scroll; this watcher owns
  * SPA arrivals (graph links) and later hash changes. The mount path polls on

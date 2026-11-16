@@ -171,7 +171,7 @@ describe("session-scoped overlays (chrome-melt wave, 2026-09-19)", () => {
 	});
 
 	it("the plan popup is session-scoped the same way, and its chart is hidden until the first fit (no top-left flash)", () => {
-		const html = renderToStaticMarkup(<PlanPopup messages={[]} onClose={() => {}} />);
+		const html = renderToStaticMarkup(<PlanPopup messages={[]} onClose={() => {}} onOpenNode={() => {}} />);
 		assert.match(html, /data-testid="plan-popup"/);
 		assert.match(html, /role="region"/);
 		assert.ok(!html.includes("aria-modal"));
